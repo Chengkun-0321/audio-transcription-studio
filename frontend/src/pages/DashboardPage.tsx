@@ -169,10 +169,10 @@ export function DashboardPage() {
   ];
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl gap-8">
-      {/* 側欄 */}
-      <aside className="w-52 shrink-0">
-        <ul className="flex flex-col gap-0.5">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 md:flex-row md:gap-8">
+      {/* 側欄：手機為橫向捲動 chips 列，md 以上為直向清單 */}
+      <aside className="flex w-full shrink-0 items-start gap-1 overflow-x-auto md:block md:w-52 md:overflow-visible">
+        <ul className="flex gap-1 md:flex-col md:gap-0.5">
           {folderTargets.map((f) => (
             <li key={f.key ?? "__all__"} className="group relative">
               <button
@@ -185,7 +185,7 @@ export function DashboardPage() {
                 }}
                 onDragLeave={() => setDragOverFolder(null)}
                 onDrop={(e) => f.key !== null && onFolderDrop(e, f.key === "inbox" ? null : f.key)}
-                className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors ${
+                className={`flex w-full items-center justify-between gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm transition-colors ${
                   currentFolder === f.key
                     ? "bg-sonar-soft font-medium text-sonar"
                     : "text-fg-muted hover:bg-surface-hover hover:text-fg"
@@ -221,7 +221,7 @@ export function DashboardPage() {
         </ul>
 
         {newFolderMode ? (
-          <div className="mt-2 px-1">
+          <div className="w-40 shrink-0 md:mt-2 md:w-auto md:px-1">
             <input
               autoFocus
               value={folderInput}
@@ -245,7 +245,7 @@ export function DashboardPage() {
               setRenamingFolder(null);
               setNewFolderMode(true);
             }}
-            className="mt-2 flex w-full items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg"
+            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg md:mt-2 md:w-full"
           >
             <span className="text-base leading-none">＋</span> 新增資料夾
           </button>
@@ -338,13 +338,13 @@ export function DashboardPage() {
                   key={m.id}
                   draggable
                   onDragStart={(e) => onRowDragStart(e, m.id)}
-                  className="group flex items-center gap-3 border-b border-line/60 px-4 py-3 transition-colors last:border-b-0 hover:bg-surface-hover"
+                  className="group flex items-center gap-2 border-b border-line/60 px-3 py-3 transition-colors last:border-b-0 hover:bg-surface-hover md:gap-3 md:px-4"
                 >
                   <input
                     type="checkbox"
                     checked={selected.has(m.id)}
                     onChange={() => toggleSelect(m.id)}
-                    className="opacity-0 transition-opacity focus:opacity-100 group-hover:opacity-100 data-[checked]:opacity-100"
+                    className="opacity-100 transition-opacity focus:opacity-100 data-[checked]:opacity-100 md:opacity-0 md:group-hover:opacity-100"
                     style={{ opacity: selected.has(m.id) ? 1 : undefined }}
                   />
                   <WaveformIcon className="h-4 w-8 shrink-0 text-sonar/70" />
@@ -369,10 +369,10 @@ export function DashboardPage() {
                   </div>
 
                   {/* 狀態 */}
-                  <div className="flex w-44 shrink-0 items-center justify-end gap-2">
+                  <div className="flex shrink-0 items-center justify-end gap-2 md:w-44">
                     {job ? (
                       <>
-                        <div className="min-w-0 flex-1">
+                        <div className="w-24 md:w-auto md:min-w-0 md:flex-1">
                           <div className="mb-1 flex items-center justify-between text-[11px] text-amber">
                             <span>{jobStageLabel(job)}</span>
                             <span className="font-mono">{job.progress}%</span>
@@ -408,7 +408,7 @@ export function DashboardPage() {
                       e.target.value = "";
                     }}
                     onClick={(e) => e.stopPropagation()}
-                    className="w-16 rounded-md border border-line bg-surface px-1 py-1 text-xs text-fg-muted opacity-0 outline-none transition-opacity focus:opacity-100 group-hover:opacity-100"
+                    className="hidden w-16 rounded-md border border-line bg-surface px-1 py-1 text-xs text-fg-muted opacity-0 outline-none transition-opacity focus:opacity-100 group-hover:opacity-100 md:block"
                     title="移至資料夾"
                   >
                     <option value="" disabled>
@@ -425,7 +425,7 @@ export function DashboardPage() {
                   </select>
                   <button
                     onClick={() => deleteMedia([m.id])}
-                    className="rounded p-1.5 text-fg-muted opacity-0 transition-opacity hover:text-danger group-hover:opacity-100"
+                    className="rounded p-1.5 text-fg-muted opacity-100 transition-opacity hover:text-danger md:opacity-0 md:group-hover:opacity-100"
                     title="刪除"
                   >
                     <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M8 6V4h8v2m-9 0l1 14h8l1-14" strokeLinecap="round" strokeLinejoin="round"/></svg>

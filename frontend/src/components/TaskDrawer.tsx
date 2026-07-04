@@ -30,7 +30,7 @@ export function TaskDrawer() {
     <div className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
-        className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm transition-colors ${
+        className={`flex items-center gap-2 whitespace-nowrap rounded-lg border px-3 py-1.5 text-sm transition-colors ${
           activeJobs.length > 0
             ? "border-amber/50 bg-amber-soft text-amber"
             : "border-line text-fg-muted hover:bg-surface-hover"
@@ -51,7 +51,7 @@ export function TaskDrawer() {
           <>
             <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
             <motion.div
-              className="absolute right-0 z-40 mt-2 w-96 rounded-xl border border-line bg-surface p-3 shadow-2xl"
+              className="absolute right-0 z-40 mt-2 w-96 max-w-[calc(100vw-1.5rem)] rounded-xl border border-line bg-surface p-3 shadow-2xl"
               initial={{ opacity: 0, y: -6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
