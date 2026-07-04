@@ -1,0 +1,180 @@
+# 深海聲納 — 實作說明（Architecture）
+
+本文件完整說明本專案怎麼實作：使用什麼技術、什麼模型、模型放在哪裡、轉譯與降噪的完整流程。
+
+## 1. 系統總覽
+
+```
+瀏覽器 (http://localhost:3000)
+   │
+   ▼
+前端 Vite dev server :3000 ──/api proxy──▶ 後端 FastAPI :8000
+   （React 19 SPA）                          │
+                                             ├── BackgroundTasks（背景任務執行緒池）
+                                             │     ├── 轉錄 pipeline：降噪 → 轉錄 → 說話者識別
+                                             │     └── YouTube 下載（yt-dlp）
+                                             │
+                                             ├── data/     ← 檔案系統即資料庫（媒體 + JSON）
+                                             └── models/   ← 所有 AI 模型（本專案自帶，不用系統快取）
+```
+
+- **單人本地工具**：後端只綁 `127.0.0.1`，無帳號、無資料庫、無 Docker
+- **一切不離開這台電腦**：轉錄、識別、降噪全部本機運算，不呼叫任何雲端 API
+- **隨開隨關**：`./manage.sh start / stop`，pid file 追蹤，不常駐、不開機自啟
+
+## 2. 技術棧
+
+| 層 | 技術 | 說明 |
+|---|---|---|
+| 後端 | FastAPI + Python 3.12（`backend/.venv`） | API + BackgroundTasks 背景任務 |
+| 前端 | Vite 7 + React 19 + TypeScript + Tailwind 4 + framer-motion 12 | Node 22（nvm，`.nvmrc`） |
+| 轉錄引擎 | **mlx-whisper**（OpenAI Whisper 的 Apple MLX 移植） | 用 M1 Pro 的 **Metal GPU** 推理 |
+| 靜音偵測 | silero-vad | 切除靜音，防 Whisper 幻覺 |
+| 說話者識別 | pyannote.audio 4.x | CPU 運算 |
+| 降噪 | DeepFilterNet（官方 Rust 執行檔） | 48kHz 深度學習降噪 |
+| 下載 | yt-dlp（Python API） | 進度 hook 真實進度 |
+| 繁體轉換 | OpenCC（s2twp） | 簡體 → 台灣正體＋用語 |
+| 音訊解碼 | ffmpeg / ffprobe（系統安裝） | 任何容器 → PCM |
+
+## 3. 使用的模型與存放位置
+
+### 3.1 模型都在專案資料夾內
+
+`backend/app/config.py` 把 `HF_HOME` 環境變數指到 `<專案>/models`，因此所有 Hugging Face 模型**下載後永久保存在專案內**，不使用 `~/.cache/huggingface`：
+
+```
+本地語音轉譯/
+├── models/hub/                                        ← 全部 HF 模型（約 4.9GB，gitignore）
+│   ├── models--mlx-community--whisper-small-mlx       獵豹（~484MB）
+│   ├── models--mlx-community--whisper-large-v3-turbo  海豚（~1.6GB）
+│   ├── models--mlx-community--whisper-large-v3-mlx    鯨魚（~3GB）
+│   ├── models--pyannote--speaker-diarization-community-1  說話者識別 pipeline
+│   └── models--pyannote--*                            （其相依元件）
+├── backend/bin/deep-filter                            ← 降噪引擎（Rust 執行檔，27MB，進版控）
+└── backend/.venv/.../silero_vad/                      ← VAD 模型（隨 pip 套件內建）
+```
+
+- 首次使用某模式時自動下載到 `models/hub/`，之後離線可用
+- 刪掉 `models/` 可釋放空間，下次使用會自動重新下載
+- clone 專案後不需手動下載模型（除了 pyannote 需 HF token，見 §5）
+
+### 3.2 三檔轉錄模式
+
+| 模式 | HF 模型 | 特性 |
+|---|---|---|
+| 獵豹 | `mlx-community/whisper-small-mlx` | 最快，快速預覽 |
+| 海豚 | `mlx-community/whisper-large-v3-turbo` | 平衡，日常推薦（預設） |
+| 鯨魚 | `mlx-community/whisper-large-v3-mlx` | 最準，重要內容 |
+
+注意 HF 上的實際 repo 名稱：small 與 large-v3 帶 `-mlx` 後綴、turbo 沒有。
+
+## 4. 轉譯流程（`services/pipeline.py` → `transcriber.py`）
+
+```
+media 檔（任何格式）
+  │ ffmpeg pipe 解碼
+  ▼
+16kHz 單聲道 float32 波形（audio.py）
+  │ silero-vad 找語音區間
+  ▼
+語音段（前後 pad 0.25s、間隔 <1s 合併）
+  │ ★ 音樂 fallback：語音覆蓋率 <20%（唱歌/純音樂 VAD 會失效）
+  │   → 放棄 VAD，整段音檔直接均分
+  ▼
+合併為 ≤120 秒的塊
+  │ 逐塊丟 mlx_whisper.transcribe（Metal GPU）
+  │   - word_timestamps=True（逐字時間戳）
+  │   - 語言：auto 時第一塊偵測後鎖定，避免逐塊漂移
+  │   - 每塊完成回報進度（真實進度 = 已處理秒數 / 語音總秒數）
+  ▼
+時間戳映射回原始時間軸（塊偏移量相加）
+  │ 偵測為中文時：OpenCC s2twp 轉台灣繁體（逐字用 s2t 保持字數對齊）
+  ▼
+jobs/<job-id>.segments.json（單一真實來源）
+  └── TXT / SRT / DOCX 匯出都由它即時產生（exporter.py），不存重複副本
+```
+
+**為什麼要 VAD 前處理**：Whisper 對長靜音會產生幻覺（重複句、無中生有）。先用 silero-vad 切掉靜音段是主要防線；但 VAD 是「語音」偵測器，對有伴奏的歌聲判定極差（實測歌曲 MV 只偵測到 1.4%），所以覆蓋率過低時改為整段轉錄。
+
+## 5. 說話者識別（`services/diarizer.py`）
+
+- 模型：`pyannote/speaker-diarization-community-1`（**gated model**：需 HF 帳號接受條款 + `backend/.env` 設 `HF_TOKEN`）
+- **強制 CPU**：pyannote 部分運算在 Apple MPS 上不相容，直接指定 CPU 不嘗試 GPU。一小時音檔約需 10–20 分鐘，故 UI 預設關閉
+- 流程：媒體 → 16k wav → pipeline 推理（hook 回報 segmentation/embeddings 批次進度）→ 說話者輪替時間表
+- 說話者按首次出現順序改名為 S1/S2…（比 SPEAKER_00 好讀）
+- 指派：每個轉錄 segment 取「時間重疊最大」的說話者
+- 刻意用**原始檔**而非降噪檔做識別——speaker embedding 對原聲更穩定
+
+## 6. 降噪技術（`services/denoiser.py`）
+
+- 引擎：**DeepFilterNet**（深度學習全頻帶降噪 + 語音增強），使用官方 GitHub releases 的 **Rust 獨立執行檔** `backend/bin/deep-filter`（aarch64-apple-darwin）
+- 為什麼不用 pip 套件：`deepfilternet` Python 套件已停止維護，會把 numpy 降到 1.x 且 import 已被移除的 `torchaudio.backend`，與現代環境不相容；官方執行檔效果相同且零 Python 相依
+- 流程：`ffmpeg` 轉 48kHz 單聲道 wav → `deep-filter input.wav -o outdir` → 增強後 wav 交給轉錄
+- UI 中為「音訊修復」選項（預設關），適合背景噪音明顯的錄音
+
+## 7. 任務系統（背景執行 + 真實進度 + 可終止）
+
+- API 建立任務後立即回傳，實際工作由 FastAPI **BackgroundTasks** 在執行緒池跑（同步函式不卡 event loop）
+- 狀態機：`queued → processing → done | error | cancelled`，每步原子改寫 `jobs/<id>.json`
+- **真實進度**（非動畫）：各階段依權重合成 0–100（降噪 15、轉錄 70、識別 25，未開啟的階段不佔比）；下載進度來自 yt-dlp hook
+- **協作式取消**：`POST /api/jobs/{id}/cancel` 設 `cancel_requested` 旗標；worker 每次寫進度時檢查，拋 `JobCancelled` 中止。轉錄任務標為 `cancelled` 留在歷史；下載任務直接刪除未完成的媒體條目
+- 前端 `AppContext` 每 2 秒輪詢 `/api/jobs?active=true`（閒置時 6 秒），任務完成時遞增 `jobsVersion` 通知各頁刷新
+
+## 8. 儲存設計（無資料庫，`storage.py`）
+
+```
+data/
+├── inbox/<media-id>/              未分類
+└── library/<資料夾名>/<media-id>/  已歸類
+      ├── source.<ext>             原始媒體（上傳或下載）
+      ├── meta.json                標題、來源、時長、種類…
+      └── jobs/
+          ├── <job-id>.json           任務狀態（狀態機 + 進度）
+          └── <job-id>.segments.json  轉錄結果
+```
+
+- media-id = 時間戳 + 隨機 hex（`20260704-153421-78cd`），同時是目錄名
+- 搬移資料夾 = `mv` 目錄；**備份 = 複製整個 data/**
+- 所有 JSON 先寫 tmp 再 rename（原子性），前端輪詢不會讀到半成品
+- job 查找有記憶體索引加速，重啟後靠掃描重建——重啟不掉資料
+
+## 9. YouTube 下載（`services/downloader.py`）
+
+- yt-dlp Python API；MP4 用 `bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b`（**最高畫質**視訊+最佳音訊合併，可拿到 4K/AV1），MP3 下載最佳音訊後 ffmpeg 轉 192kbps
+- progress hook 節流 0.5 秒寫回進度與速度；進度停在 90/92% 保留給合併/轉檔
+- 錯誤訊息可讀化（私人影片、年齡限制、影片不存在…）
+
+## 10. API 一覽
+
+| Method | Path | 說明 |
+|---|---|---|
+| POST | `/api/media/upload` | 上傳（multipart，可指定 folder） |
+| POST | `/api/media/youtube` | 建立 YouTube 下載任務 |
+| GET | `/api/media?folder=` | 媒體列表（全部/未分類/指定資料夾） |
+| GET | `/api/media/{id}` | 單一媒體 + 任務列表 |
+| GET | `/api/media/{id}/file` | 媒體串流（HTTP Range，站內播放） |
+| PATCH | `/api/media/{id}` | 改名 |
+| PATCH | `/api/media/{id}/move` | 移至資料夾 |
+| DELETE | `/api/media/{id}` | 刪除媒體 |
+| GET/POST | `/api/folders` | 資料夾列表 / 建立 |
+| PATCH/DELETE | `/api/folders/{name}` | 改名 / 刪除（媒體移回未分類） |
+| POST | `/api/jobs` | 建立轉錄任務 |
+| GET | `/api/jobs?active=true` | 任務列表（前端輪詢） |
+| GET | `/api/jobs/{id}` | 任務狀態 |
+| POST | `/api/jobs/{id}/cancel` | 終止任務 |
+| GET | `/api/jobs/{id}/segments` | 轉錄結果 JSON |
+| GET | `/api/jobs/{id}/transcript?format=txt\|srt\|docx&timestamps=` | 匯出 |
+
+## 11. 前端設計（深海聲納）
+
+- 手動雙主題（深海/水面），CSS 變數 + Tailwind `@theme inline`，元件內無硬編碼色票
+- 招牌動效：波形脈動（取代 spinner）、拖放聲納 ping、完成打勾 stroke draw-in；全部尊重 `prefers-reduced-motion`
+- 字體 self-host（Space Grotesk / Inter / JetBrains Mono，@fontsource），離線可用
+- 站內播放：`<video>`/`<audio>` 直接吃 `/api/media/{id}/file`（Range 支援 seek），逐字稿點時間戳跳轉、播放跟隨高亮
+
+## 12. 已知限制
+
+- 說話者識別 CPU-bound（pyannote 無 MLX 版）
+- 鯨魚模式在 16GB 機型與其他大型程式並用時可能有記憶體壓力
+- 任務終止是協作式：最長要等目前推理塊（≤120 秒音訊）跑完才停
+- yt-dlp 與 YouTube ToS 有灰色地帶，僅供個人本機使用

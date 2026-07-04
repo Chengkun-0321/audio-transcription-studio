@@ -1,0 +1,88 @@
+/* 全域樣式與「深海聲納」設計 token（規格 §6）。
+ * 顏色一律走 CSS 變數 → @theme inline 轉成 Tailwind utility（bg-surface、
+ * text-sonar…），元件內不出現硬編碼色票，切主題只需換 :root/.dark 的變數值。 */
+@import "tailwindcss";
+
+/* 手動雙主題（規格 §6）：深海 = dark、水面 = light，不跟隨系統，由 useTheme 切 .dark class */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  /* 水面（Light） */
+  --ink: #f4f7f9;
+  --ink-deep: #e9eef2;
+  --surface: #ffffff;
+  --surface-hover: #f0f4f6;
+  --line: #d8e1e6;
+  --fg: #141a21;
+  --fg-muted: #5b6b78;
+  --sonar: #0f9c8f;
+  --sonar-soft: rgba(15, 156, 143, 0.12);
+  --amber: #c2760a;
+  --amber-soft: rgba(194, 118, 10, 0.12);
+  --danger: #b3362c;
+  --danger-soft: rgba(179, 54, 44, 0.1);
+}
+
+.dark {
+  /* 深海（Dark） */
+  --ink: #0a0e14;
+  --ink-deep: #070a0f;
+  --surface: #121924;
+  --surface-hover: #182230;
+  --line: #1f2a36;
+  --fg: #e4ecf1;
+  --fg-muted: #8fa3b0;
+  --sonar: #3ed9c4;
+  --sonar-soft: rgba(62, 217, 196, 0.12);
+  --amber: #f2a65a;
+  --amber-soft: rgba(242, 166, 90, 0.14);
+  --danger: #f27e6f;
+  --danger-soft: rgba(242, 126, 111, 0.12);
+}
+
+@theme inline {
+  --color-ink: var(--ink);
+  --color-ink-deep: var(--ink-deep);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-line: var(--line);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-sonar: var(--sonar);
+  --color-sonar-soft: var(--sonar-soft);
+  --color-amber: var(--amber);
+  --color-amber-soft: var(--amber-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+
+  --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, "PingFang TC", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--fg);
+  /* 主背景由上往下微幅加深（深海感）；淺色主題同樣柔和 */
+  background: linear-gradient(180deg, var(--ink) 0%, var(--ink-deep) 100%) fixed;
+}
+
+::selection {
+  background: var(--sonar-soft);
+}
+
+/* hairline 捲軸，融入深海介面 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+input[type="checkbox"] {
+  accent-color: var(--sonar);
+}

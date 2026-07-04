@@ -1,0 +1,24 @@
+# Python 虛擬環境與快取
+.venv/
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+dist/
+frontend/tsconfig.tsbuildinfo
+
+# 使用者資料（媒體檔與轉錄結果）——備份 = 複製此目錄
+data/
+
+# AI 模型（約 4.9GB，首次使用自動下載到 models/hub/，不進版控）
+models/
+
+# 執行期檔案（pid、log）
+.run/
+
+# 秘密：HF_TOKEN 在此，絕不進版控
+backend/.env
+
+# macOS
+.DS_Store

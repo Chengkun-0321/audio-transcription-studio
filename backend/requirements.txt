@@ -1,0 +1,26 @@
+# Web 框架與伺服器
+fastapi                       # API 框架（BackgroundTasks 執行背景任務）
+uvicorn[standard]             # ASGI 伺服器（manage.sh 直接執行）
+python-multipart              # FastAPI 處理 multipart 上傳所需
+python-dotenv                 # 讀 backend/.env（HF_TOKEN）
+
+# 轉錄與音訊處理
+mlx-whisper                   # Whisper 的 Apple Silicon MLX 移植（Metal GPU 加速）
+silero-vad                    # 語音活動偵測：切除靜音段，防 Whisper 幻覺（模型隨套件內建）
+opencc-python-reimplemented   # 簡體 → 台灣繁體（s2twp）
+soundfile                     # 音訊檔讀寫（pyannote 相依）
+
+# 說話者識別（CPU 運算；模型為 HF gated，需 backend/.env 的 HF_TOKEN）
+pyannote.audio
+
+# YouTube 下載
+yt-dlp
+
+# DOCX 匯出
+python-docx
+
+# 版本約束：numba（silero/pyannote 相依鏈）要求 numpy<2.5，
+# pyannote-metrics/scipy 要求 >=2.2.2；DeepFilterNet 的 pip 套件會把 numpy
+# 降到 1.x 且與 torchaudio 2.x 不相容，故降噪改用 backend/bin/deep-filter
+# 官方 Rust 執行檔，不裝其 Python 套件。
+numpy>=2.2.2,<2.5
