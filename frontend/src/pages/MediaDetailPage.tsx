@@ -4,7 +4,7 @@
  * 時間戳顯示開關（同步影響匯出）、TXT/SRT/DOCX 匯出、移至資料夾、
  * 標題點擊改名、重新轉錄、進行中任務進度與終止、任務歷史。
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { api } from "../lib/api";
@@ -41,6 +41,8 @@ export function MediaDetailPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [playbackRate, setPlaybackRateState] = useState(1);
+  const [listMaxH, setListMaxH] = useState<number | null>(null);
+  const [isWide, setIsWide] = useState(() => window.matchMedia("(min-width: 1100px)").matches);
 
   const playerRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
   const speedRef = useRef<HTMLDivElement>(null);
@@ -89,6 +91,30 @@ export function MediaDetailPage() {
     [media],
   );
   const selectedJob = media?.jobs.find((j) => j.id === selectedJobId) ?? null;
+
+  /* ≥1100px 雙欄與否：影響逐字稿列表高度的套用方式（雙欄由 sticky 卡片的 flex 控高） */
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1100px)");
+    const onChange = () => setIsWide(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  /* 逐字稿列表高度自適應：底邊貼齊視窗下緣，句子都在列表內部捲動，
+     播放跟隨就不需捲動整頁、播放器不會被擠出畫面 */
+  useLayoutEffect(() => {
+    const compute = () => {
+      const el = segListRef.current;
+      if (!el) return;
+      // 以文件座標取列表上緣，與當前捲動位置無關，避免 maxHeight 變動引發回饋循環
+      const docTop = el.getBoundingClientRect().top + window.scrollY;
+      setListMaxH(Math.max(200, window.innerHeight - docTop - 16));
+    };
+    compute();
+    window.addEventListener("resize", compute);
+    return () => window.removeEventListener("resize", compute);
+    // activeJob 每次輪詢都是新物件，但 compute 結果相同時 setState 不會觸發重渲染
+  }, [transcript, activeJob, newJobOpen, media]);
 
   /* 播放跟隨：目前段落高亮並捲動至可視範圍 */
   const activeSegIdx = useMemo(() => {
@@ -616,9 +642,11 @@ export function MediaDetailPage() {
             ) : (
               <div
                 ref={segListRef}
-                className={`max-h-[480px] overflow-y-auto px-5 py-4 ${
-                  isVideo ? "min-[1100px]:min-h-0 min-[1100px]:max-h-none min-[1100px]:flex-1" : ""
+                className={`overflow-y-auto px-5 py-4 ${
+                  isVideo ? "min-[1100px]:min-h-0 min-[1100px]:flex-1" : ""
                 }`}
+                // 雙欄影片由 sticky 卡片 flex 控高，不套量測值；其餘情境用視窗自適應高度
+                style={isVideo && isWide ? undefined : { maxHeight: listMaxH ?? 480 }}
                 onWheel={() => {
                   followRef.current = false;
                 }}

@@ -62,7 +62,7 @@ start() {
   # shellcheck disable=SC1091
   source "$NVM_DIR/nvm.sh"
   nvm use --silent >/dev/null
-  nohup node node_modules/vite/bin/vite.js --port "$FRONTEND_PORT" \
+  nohup node node_modules/vite/bin/vite.js --host 0.0.0.0 --port "$FRONTEND_PORT" \
     > "$RUN_DIR/frontend.log" 2>&1 &
   echo $! > "$RUN_DIR/frontend.pid"
 
