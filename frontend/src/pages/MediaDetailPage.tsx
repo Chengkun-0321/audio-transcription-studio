@@ -40,10 +40,13 @@ export function MediaDetailPage() {
   const [settings, setSettings] = useState<TranscribeSettings>(DEFAULT_SETTINGS);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
+  const [playbackRate, setPlaybackRateState] = useState(1);
 
   const playerRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
+  const speedRef = useRef<HTMLDivElement>(null);
   const segListRef = useRef<HTMLDivElement>(null);
   const followRef = useRef(true);
+  const lastSaveRef = useRef(0);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -117,9 +120,9 @@ export function MediaDetailPage() {
     const listDelta = top !== null ? top - container.scrollTop : 0;
     const finalTop = elRect.top - listDelta;
     const finalBottom = elRect.bottom - listDelta;
-    // 上界取「黏著播放器下緣」：單欄時影片蓋在內容上方，當前句要落在影片之下才看得到
-    const playerBottom = playerRef.current?.getBoundingClientRect().bottom ?? 0;
-    const upperBound = Math.max(72, playerBottom + 8);
+    // 上界取「黏著播放器（含速度列）下緣」：單欄時影片蓋在內容上方，當前句要落在其下才看得到
+    const coverBottom = (speedRef.current ?? playerRef.current)?.getBoundingClientRect().bottom ?? 0;
+    const upperBound = Math.max(72, coverBottom + 8);
     const lowerBound = window.innerHeight - 16;
     if (finalBottom > lowerBound) {
       window.scrollBy({ top: finalBottom - lowerBound, behavior: "smooth" });
@@ -135,6 +138,105 @@ export function MediaDetailPage() {
       playerRef.current.play().catch(() => {});
     }
   };
+
+  const togglePlay = () => {
+    const el = playerRef.current;
+    if (!el) return;
+    if (el.paused) el.play().catch(() => {});
+    else el.pause();
+  };
+
+  const seekBy = (delta: number) => {
+    const el = playerRef.current;
+    if (!el) return;
+    followRef.current = true;
+    el.currentTime = Math.max(0, el.currentTime + delta); // 上界瀏覽器原生會 clamp 到 duration
+  };
+
+  /** 跳至前一句/後一句開頭；dir 為 1 時往後、-1 時往前。 */
+  const jumpSegment = (dir: 1 | -1) => {
+    if (!transcript || transcript.segments.length === 0) return;
+    const segs = transcript.segments;
+    if (dir > 0) {
+      const next = segs.findIndex((s) => s.start > currentTime + 0.15);
+      if (next >= 0) seekTo(segs[next].start);
+      return;
+    }
+    const refStart = activeSegIdx >= 0 ? segs[activeSegIdx].start : currentTime;
+    for (let i = segs.length - 1; i >= 0; i--) {
+      if (segs[i].start < refStart - 0.15) {
+        seekTo(segs[i].start);
+        return;
+      }
+    }
+  };
+
+  const setPlaybackRate = (r: number) => {
+    const clamped = Math.min(2, Math.max(0.5, Math.round(r * 100) / 100));
+    setPlaybackRateState(clamped);
+    if (playerRef.current) playerRef.current.playbackRate = clamped;
+  };
+
+  /** 播放器 <video>/<audio> 掛載完成：套用播放速度，並跳回上次播放位置。 */
+  const handleLoadedMetadata = (el: HTMLVideoElement | HTMLAudioElement) => {
+    el.playbackRate = playbackRate;
+    if (!media) return;
+    const saved = Number(localStorage.getItem(`playback-pos-${media.id}`));
+    if (saved > 0 && saved < el.duration - 1) el.currentTime = saved;
+  };
+
+  /** 節流寫入播放進度到 localStorage（>5 秒差才寫一次）。 */
+  const savePlaybackPos = (t: number) => {
+    if (!media) return;
+    if (Math.abs(t - lastSaveRef.current) < 5) return;
+    lastSaveRef.current = t;
+    localStorage.setItem(`playback-pos-${media.id}`, String(t));
+  };
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT" ||
+        target.isContentEditable
+      ) {
+        return;
+      }
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      switch (e.key) {
+        case " ":
+          e.preventDefault();
+          togglePlay();
+          break;
+        case "ArrowRight":
+          e.preventDefault();
+          seekBy(10);
+          break;
+        case "ArrowLeft":
+          e.preventDefault();
+          seekBy(-10);
+          break;
+        case "ArrowUp":
+          e.preventDefault();
+          jumpSegment(-1);
+          break;
+        case "ArrowDown":
+          e.preventDefault();
+          jumpSegment(1);
+          break;
+        case ",":
+          setPlaybackRate(playbackRate - 0.25);
+          break;
+        case ".":
+          setPlaybackRate(playbackRate + 0.25);
+          break;
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [playbackRate, transcript, currentTime, activeSegIdx]);
 
   const speakerColor = useMemo(() => {
     const map = new Map<string, string>();
@@ -335,7 +437,12 @@ export function MediaDetailPage() {
                   src={api.mediaFileUrl(media.id)}
                   controls
                   className="max-h-[min(420px,55svh)] w-full rounded-xl border border-line bg-black min-[1100px]:max-h-[min(680px,70svh)]"
-                  onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+                  onLoadedMetadata={(e) => handleLoadedMetadata(e.currentTarget)}
+                  onTimeUpdate={(e) => {
+                    setCurrentTime(e.currentTarget.currentTime);
+                    savePlaybackPos(e.currentTarget.currentTime);
+                  }}
+                  onPause={(e) => savePlaybackPos(e.currentTarget.currentTime)}
                   onPlay={() => {
                     followRef.current = true;
                   }}
@@ -348,7 +455,12 @@ export function MediaDetailPage() {
                   src={api.mediaFileUrl(media.id)}
                   controls
                   className="w-full"
-                  onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+                  onLoadedMetadata={(e) => handleLoadedMetadata(e.currentTarget)}
+                  onTimeUpdate={(e) => {
+                    setCurrentTime(e.currentTarget.currentTime);
+                    savePlaybackPos(e.currentTarget.currentTime);
+                  }}
+                  onPause={(e) => savePlaybackPos(e.currentTarget.currentTime)}
                   onPlay={() => {
                     followRef.current = true;
                   }}
@@ -358,6 +470,29 @@ export function MediaDetailPage() {
               <div className="flex items-center gap-3 rounded-xl border border-line bg-surface p-5 text-sm text-fg-muted">
                 {activeJob ? <WaveformPulse size="sm" /> : null}
                 {activeJob ? "媒體下載中，完成後即可播放…" : "媒體檔尚未就緒"}
+              </div>
+            )}
+
+            {/* 播放速度：也可用鍵盤 , / . 微調。與播放器同綁一個 sticky 區塊，避免被逐字稿捲動蓋住 */}
+            {fileReady && (
+              <div
+                ref={speedRef}
+                className={`flex items-center gap-1.5 text-xs text-fg-muted ${isVideo ? "mt-2" : ""}`}
+              >
+                <span>速度</span>
+                {[0.75, 1, 1.25, 1.5, 2].map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => setPlaybackRate(r)}
+                    className={`rounded-md border px-1.5 py-0.5 font-mono transition-colors ${
+                      playbackRate === r
+                        ? "border-sonar bg-sonar-soft text-sonar"
+                        : "border-line hover:bg-surface-hover hover:text-fg"
+                    }`}
+                  >
+                    {r}x
+                  </button>
+                ))}
               </div>
             )}
           </div>
@@ -513,7 +648,14 @@ export function MediaDetailPage() {
                         {seg.speaker}
                       </span>
                     )}
-                    <p className="min-w-0 flex-1 text-sm leading-relaxed">
+                    <p
+                      onClick={() => {
+                        if (window.getSelection()?.toString()) return; // 反白選字複製時不搶跳轉
+                        seekTo(seg.start);
+                      }}
+                      title="點擊跳到此處播放"
+                      className="min-w-0 flex-1 cursor-pointer text-sm leading-relaxed transition-colors hover:text-sonar"
+                    >
                       {search.trim() ? highlight(seg.text, search.trim()) : seg.text}
                     </p>
                     <button
