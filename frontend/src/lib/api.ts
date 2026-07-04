@@ -1,4 +1,4 @@
-/** 後端 API 的型別化包裝。所有請求走相對路徑 /api，由 Vite proxy 轉到 8000。 */
+/** 後端 API 的型別化包裝。所有請求走相對路徑 /api，由 Vite proxy 轉送。 */
 import type { Folder, Job, Media, Transcript } from "./types";
 
 /** fetch 包裝：非 2xx 時把後端的 detail 轉成可讀的 Error message。 */

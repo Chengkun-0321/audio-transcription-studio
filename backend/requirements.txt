@@ -2,7 +2,7 @@
 fastapi                       # API 框架（BackgroundTasks 執行背景任務）
 uvicorn[standard]             # ASGI 伺服器（manage.sh 直接執行）
 python-multipart              # FastAPI 處理 multipart 上傳所需
-python-dotenv                 # 讀 backend/.env（HF_TOKEN）
+python-dotenv                 # 讀根目錄 .env（Port 與 HF_TOKEN）
 
 # 轉錄與音訊處理
 mlx-whisper                   # Whisper 的 Apple Silicon MLX 移植（Metal GPU 加速）
@@ -10,7 +10,7 @@ silero-vad                    # 語音活動偵測：切除靜音段，防 Whisp
 opencc-python-reimplemented   # 簡體 → 台灣繁體（s2twp）
 soundfile                     # 音訊檔讀寫（pyannote 相依）
 
-# 說話者識別（CPU 運算；模型為 HF gated，需 backend/.env 的 HF_TOKEN）
+# 說話者識別（CPU 運算；模型為 HF gated，需根目錄 .env 的 HF_TOKEN）
 pyannote.audio
 
 # YouTube 下載

@@ -169,7 +169,7 @@ export function DashboardPage() {
   ];
 
   return (
-    <div className="flex gap-8">
+    <div className="mx-auto flex w-full max-w-6xl gap-8">
       {/* 側欄 */}
       <aside className="w-52 shrink-0">
         <ul className="flex flex-col gap-0.5">

@@ -17,7 +17,9 @@ models/
 # 執行期檔案（pid、log）
 .run/
 
-# 秘密：HF_TOKEN 在此，絕不進版控
+# 本機 Port 與 HF_TOKEN；預設值與格式見 .env.example
+/.env
+# 舊版 Token 路徑仍忽略，避免遷移前誤提交
 backend/.env
 
 # macOS

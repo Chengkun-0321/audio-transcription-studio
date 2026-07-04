@@ -1,7 +1,7 @@
 """FastAPI 應用程式入口。
 
 組裝三個 router（media / folders / jobs）並掛上 CORS。
-由 manage.sh 以 uvicorn 啟動：`uvicorn app.main:app --host 127.0.0.1 --port 8000`。
+由 manage.sh 依根目錄 .env 的 BACKEND_PORT 啟動 uvicorn。
 只綁 127.0.0.1——單人本地工具，不對外開放。
 """
 from fastapi import FastAPI
@@ -15,10 +15,13 @@ config.ensure_dirs()
 
 app = FastAPI(title="本地語音轉錄工具", version="1.0.0")
 
-# 前端 dev server 在 3000（Vite proxy 也會轉 /api，此處為雙保險）
+# 允許自訂 Port 的前端直接呼叫 API；正常請求仍由 Vite proxy 轉送。
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=[
+        f"http://localhost:{config.FRONTEND_PORT}",
+        f"http://127.0.0.1:{config.FRONTEND_PORT}",
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )

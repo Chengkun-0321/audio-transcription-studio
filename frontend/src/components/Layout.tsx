@@ -64,7 +64,7 @@ export function Layout({ children }: { children: ReactNode }) {
       {/* 頁面載入：淡入＋些微上移，200ms 內完成（規格 §6） */}
       <motion.main
         key={location.pathname}
-        className="mx-auto w-full max-w-6xl flex-1 px-5 py-8"
+        className="mx-auto w-full max-w-[1600px] flex-1 px-5 py-8"
         initial={reduced ? false : { opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.2, ease: "easeOut" }}

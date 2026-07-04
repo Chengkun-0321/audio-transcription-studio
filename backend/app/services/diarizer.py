@@ -24,7 +24,7 @@ def _get_pipeline():
         token = os.environ.get("HF_TOKEN")
         if not token:
             raise RuntimeError(
-                "說話者識別需要 Hugging Face token：請在 backend/.env 設定 HF_TOKEN"
+                "說話者識別需要 Hugging Face token：請在專案根目錄 .env 設定 HF_TOKEN"
             )
         import torch
         from pyannote.audio import Pipeline

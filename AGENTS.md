@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-本檔案為 Claude Code 在此專案工作時的指引。
+本檔案為 Codex 在此專案工作時的指引。
 
 ## 專案概述
 

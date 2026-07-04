@@ -2,7 +2,7 @@
 
 單人本地工具：YouTube 下載 + MLX Whisper 轉錄（Apple Silicon Metal 加速）+ 說話者識別 + AI 降噪 + TXT/SRT/DOCX 匯出。無帳號、無資料庫、無 Docker，不用時完全關閉。
 
-完整實作說明（技術棧、模型、轉譯與降噪流程）見 [ARCHITECTURE.md](ARCHITECTURE.md)。
+完整實作說明（技術棧、模型、轉譯與降噪流程）見 [詳細實作說明.md](詳細實作說明.md)。
 
 ## 使用
 
@@ -11,6 +11,12 @@
 ./manage.sh stop     # 完全關閉，不佔資源
 ./manage.sh status   # 查看狀態
 ./manage.sh logs     # 看日誌
+```
+
+前後端 Port 統一設定於根目錄 `.env`；首次 clone 可由範本建立：
+
+```bash
+cp .env.example .env
 ```
 
 ## 功能
@@ -35,7 +41,7 @@
 - `frontend/`：Vite 7 + React 19 + Tailwind 4（Node 22，`.nvmrc`）。
 - `data/`：檔案系統即資料庫——`library/<資料夾>/<media-id>/`（source.* + meta.json + jobs/），`inbox/` 為未分類。備份 = 複製 data/。
 - `models/`：所有 AI 模型統一放在專案內（約 4.9GB，首次使用自動下載，之後離線可用，不進版控）。
-- `backend/.env`：`HF_TOKEN`（pyannote gated model 用，不進版控）。
+- 根目錄 `.env`：前後端 Port 與 `HF_TOKEN`（pyannote gated model 用，不進版控）。
 
 ## 已知限制
 

@@ -4,9 +4,15 @@
     {
       "name": "frontend",
       "runtimeExecutable": "zsh",
-      "runtimeArgs": ["-c", "source $HOME/.nvm/nvm.sh && nvm use 22 && npm run dev"],
+      "runtimeArgs": ["-c", "source $HOME/.nvm/nvm.sh && nvm use 22 && FRONTEND_PORT=3000 BACKEND_PORT=8000 npm run dev"],
       "cwd": "frontend",
       "port": 3000
+    },
+    {
+      "name": "backend",
+      "runtimeExecutable": "backend/.venv/bin/uvicorn",
+      "runtimeArgs": ["app.main:app", "--host", "127.0.0.1", "--port", "8000", "--app-dir", "backend"],
+      "port": 8000
     }
   ]
 }
