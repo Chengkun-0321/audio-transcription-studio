@@ -117,7 +117,7 @@ export function UploadModal({
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
           onClick={() => inputRef.current?.click()}
-          className={`relative flex min-h-36 cursor-pointer flex-col items-center justify-center gap-2 overflow-hidden rounded-3xl border-[1.5px] border-dashed p-6 transition-colors ${
+          className={`relative flex min-h-36 cursor-pointer flex-col items-center justify-center gap-2 overflow-hidden rounded-row border-[1.5px] border-dashed p-6 transition-colors ${
             dragging
               ? "border-sonar bg-sonar-soft"
               : "border-fg/15 bg-fg/[0.03] hover:border-fg/30 hover:bg-fg/[0.05]"
@@ -148,10 +148,14 @@ export function UploadModal({
         {items.length > 0 && (
           <ul className="flex flex-col gap-2">
             {items.map((it, i) => (
-              <li key={i} className="rounded-2xl bg-fg/[0.04] px-4 py-2.5">
-                <div className="flex items-center justify-between gap-3">
+              <li key={i} className="rounded-row bg-fg/[0.04] py-2 pl-4 pr-2">
+                <div className="flex min-h-8 items-center justify-between gap-3">
                   <span className="min-w-0 flex-1 truncate text-sm">{it.file.name}</span>
-                  <span className="shrink-0 font-mono text-xs tabular-nums text-fg-muted">
+                  <span
+                    className={`shrink-0 font-mono text-xs tabular-nums text-fg-muted ${
+                      !busy && it.status === "pending" ? "" : "mr-2"
+                    }`}
+                  >
                     {it.status === "error" ? (
                       <span className="text-danger">{it.error}</span>
                     ) : it.status === "done" ? (
@@ -167,7 +171,6 @@ export function UploadModal({
                       label="移除"
                       tone="danger"
                       size="sm"
-                      className="-mr-1.5"
                       onClick={() => setItems((p) => p.filter((_, j) => j !== i))}
                     >
                       <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2.2}>
@@ -176,7 +179,7 @@ export function UploadModal({
                     </IconButton>
                   )}
                 </div>
-                {it.status === "uploading" && <ProgressBar value={it.progress} className="mt-2" />}
+                {it.status === "uploading" && <ProgressBar value={it.progress} className="mb-1 mr-2 mt-2" />}
               </li>
             ))}
           </ul>
@@ -185,7 +188,7 @@ export function UploadModal({
         {/* 目的資料夾 + 是否轉錄 */}
         <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
           <label className="flex items-center gap-2.5 text-sm">
-            <span className="text-fg-muted">存到</span>
+            <span className="text-fg-muted">存到資料夾</span>
             <Select value={folder ?? ""} onChange={(e) => setFolder(e.target.value || null)} className="min-w-36">
               <option value="">未分類</option>
               {folders.map((f) => (

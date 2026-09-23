@@ -2,6 +2,12 @@
  * 顏色一律走 CSS 變數 → @theme inline 轉成 Tailwind utility（bg-surface、
  * text-sonar…），元件內不出現硬編碼色票，切主題只需換 :root/.dark 的變數值。
  *
+ * 形狀規則（iOS 27 / macOS 27 同心圓角）：
+ *   圓角三級 rounded-panel 24 → rounded-row 16 → rounded-tile 8，
+ *   每往內一層縮 8px（p-2）、圓角就減 8px，巢狀形狀永遠同心。
+ *   控制項（按鈕、輸入框、下拉、分段、標籤）一律膠囊 rounded-full，
+ *   高度只用 sm 32 / md 40 / lg 48 三級，同一列的控制項才對得齊。
+ *
  * 材質分層（依 Apple Liquid Glass 原則）：
  *   ambient  —— 最底層的深海光暈背景，玻璃要有東西可透才有質感
  *   surface  —— 內容層（卡片、列表），半透明但不做 backdrop-filter，避免長列表卡頓
@@ -16,7 +22,7 @@
   /* 水面（Light） */
   --ink: #eef3f6;
   --ink-deep: #e2eaef;
-  --surface: rgba(255, 255, 255, 0.62);
+  --surface: rgba(255, 255, 255, 0.7);
   --surface-hover: rgba(15, 40, 60, 0.06);
   --line: rgba(15, 40, 60, 0.1);
   --fg: #0f1720;
@@ -35,8 +41,8 @@
   --spk-6: #4a8527;
 
   /* 玻璃材質 */
-  --glass-bg: rgba(255, 255, 255, 0.5);
-  --glass-bg-strong: rgba(250, 252, 253, 0.78);
+  --glass-bg: rgba(255, 255, 255, 0.6);
+  --glass-bg-strong: rgba(250, 252, 253, 0.86);
   --glass-solid: #f7fafb;
   --glass-sheen: rgba(255, 255, 255, 0.55);
   --glass-rim: rgba(255, 255, 255, 0.95);
@@ -75,7 +81,7 @@
   /* 深海（Dark） */
   --ink: #04070c;
   --ink-deep: #020409;
-  --surface: rgba(22, 31, 44, 0.52);
+  --surface: rgba(22, 31, 44, 0.6);
   --surface-hover: rgba(255, 255, 255, 0.06);
   --line: rgba(255, 255, 255, 0.09);
   --fg: #e8eff4;
@@ -92,8 +98,8 @@
   --spk-5: #e08fbe;
   --spk-6: #9ccc65;
 
-  --glass-bg: rgba(30, 42, 58, 0.38);
-  --glass-bg-strong: rgba(16, 24, 35, 0.74);
+  --glass-bg: rgba(30, 42, 58, 0.48);
+  --glass-bg-strong: rgba(16, 24, 35, 0.8);
   --glass-solid: #111925;
   --glass-sheen: rgba(255, 255, 255, 0.07);
   --glass-rim: rgba(255, 255, 255, 0.34);
@@ -135,6 +141,11 @@
   --color-spk-4: var(--spk-4);
   --color-spk-5: var(--spk-5);
   --color-spk-6: var(--spk-6);
+
+  /* 同心圓角三級：面板 → 面板內的列/群組 → 列內的圖示方塊 */
+  --radius-panel: 24px;
+  --radius-row: 16px;
+  --radius-tile: 8px;
 
   /* Apple 裝置走系統 SF Pro / 蘋方；其他平台退回 Inter */
   --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "PingFang TC", system-ui, sans-serif;

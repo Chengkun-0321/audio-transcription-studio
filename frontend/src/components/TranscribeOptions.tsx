@@ -107,14 +107,14 @@ export function TranscribeOptions({
                 role="radio"
                 aria-checked={active}
                 onClick={() => onChange({ ...value, mode: m })}
-                className={`press relative flex cursor-pointer flex-col items-start gap-1 rounded-2xl p-3 text-left transition-colors ${
+                className={`press relative flex cursor-pointer flex-col items-start gap-1 rounded-row p-3 text-left transition-colors ${
                   active ? "" : "bg-fg/[0.04] hover:bg-fg/[0.07]"
                 }`}
               >
                 {active && (
                   <motion.span
                     layoutId={`mode-${modeBeadId}`}
-                    className="absolute inset-0 rounded-2xl bg-sonar-soft shadow-[inset_0_0_0_1.5px_var(--sonar),0_8px_24px_-12px_var(--sonar)]"
+                    className="absolute inset-0 rounded-row bg-sonar-soft shadow-[inset_0_0_0_1.5px_var(--sonar),0_8px_24px_-12px_var(--sonar)]"
                     transition={springBead}
                   />
                 )}
@@ -170,7 +170,7 @@ export function TranscribeOptions({
         </button>
         {showAdvanced && (
           <motion.div
-            className="mt-3 divide-y divide-line overflow-hidden rounded-2xl bg-fg/[0.04]"
+            className="mt-3 divide-y divide-line overflow-hidden rounded-row bg-fg/[0.04]"
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}

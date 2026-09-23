@@ -88,24 +88,16 @@ export function CheckDraw({ className = "h-4 w-4" }: { className?: string }) {
   );
 }
 
-/** 主題切換圖示：波形深淺（不用太陽/月亮，維持聲納語言） */
-export function ThemeWaveIcon({ dark }: { dark: boolean }) {
-  // 深海 = 波形沉在下方；水面 = 波形浮在上方
-  const bars = dark ? [4, 8, 6, 10, 5] : [10, 6, 9, 5, 8];
-  return (
-    <svg viewBox="0 0 24 16" className="h-4 w-6" aria-hidden>
-      {bars.map((h, i) => (
-        <rect
-          key={i}
-          x={i * 5 + 1}
-          y={dark ? 16 - h : 0}
-          width={3}
-          height={h}
-          rx={1.5}
-          fill="currentColor"
-        />
-      ))}
-      <rect x={0} y={dark ? 15.2 : 0} width={24} height={0.8} fill="currentColor" opacity={0.5} />
+/** 主題切換圖示：目前深色顯示月亮、淺色顯示太陽，一眼看出用途 */
+export function ThemeIcon({ dark }: { dark: boolean }) {
+  return dark ? (
+    <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden>
+      <path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z" strokeLinejoin="round" />
+    </svg>
+  ) : (
+    <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" aria-hidden>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4" />
     </svg>
   );
 }

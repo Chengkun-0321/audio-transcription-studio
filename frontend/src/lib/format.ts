@@ -1,8 +1,8 @@
 /** 顯示格式化工具與 UI 常數（模式資訊、語言清單、階段標籤）。 */
 
-/** 秒數 → "3:05" / "1:02:03"（列表、播放器用） */
+/** 秒數 → "3:05" / "1:02:03"（列表用，前面要搭配「時長」標籤）；未知時為 "—" */
 export function fmtDuration(seconds: number | null | undefined): string {
-  if (seconds == null) return "--:--";
+  if (seconds == null) return "—";
   const s = Math.round(seconds);
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
@@ -10,6 +10,20 @@ export function fmtDuration(seconds: number | null | undefined): string {
   return h > 0
     ? `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`
     : `${m}:${String(sec).padStart(2, "0")}`;
+}
+
+/** 秒數 → "1 小時 22 分 17 秒" / "22 分 17 秒" / "45 秒"（詳細頁資訊欄位） */
+export function fmtDurationLong(seconds: number | null | undefined): string {
+  if (seconds == null) return "—";
+  const s = Math.round(seconds);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const parts: string[] = [];
+  if (h > 0) parts.push(`${h} 小時`);
+  if (h > 0 || m > 0) parts.push(`${m} 分`);
+  parts.push(`${sec} 秒`);
+  return parts.join(" ");
 }
 
 /** 秒數 → "00:12" / "1:02:03"（逐字稿時間戳） */
@@ -23,13 +37,36 @@ export const fmtTimestamp = (seconds: number): string => {
     : `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
 };
 
-/** ISO 時間 → 今天顯示時刻（下午03:15）、其他日期顯示月/日。 */
-export function fmtDate(iso: string): string {
+const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+
+/** ISO 時間 → "今天 14:25" / "昨天 14:25" / "9月3日 14:25" / "2025年9月3日 14:25"（列表用，24 小時制） */
+export function fmtDateTime(iso: string): string {
   const d = new Date(iso);
-  const today = new Date();
-  const sameDay = d.toDateString() === today.toDateString();
-  if (sameDay) return d.toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" });
-  return d.toLocaleDateString("zh-TW", { month: "numeric", day: "numeric" });
+  const now = new Date();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (d.toDateString() === now.toDateString()) return `今天 ${hhmm(d)}`;
+  if (d.toDateString() === yesterday.toDateString()) return `昨天 ${hhmm(d)}`;
+  const md = `${d.getMonth() + 1}月${d.getDate()}日 ${hhmm(d)}`;
+  return d.getFullYear() === now.getFullYear() ? md : `${d.getFullYear()}年${md}`;
+}
+
+/** ISO 時間 → "2026年9月3日 14:25"（詳細頁，一律含年份） */
+export function fmtDateFull(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 ${hhmm(d)}`;
+}
+
+/** 媒體來源 → 顯示文字 */
+export const SOURCE_LABEL: Record<"upload" | "youtube", string> = {
+  upload: "本機上傳",
+  youtube: "YouTube",
+};
+
+/** 媒體類型＋副檔名 → "影片 · MP4" / "音訊 · M4A" */
+export function mediaTypeLabel(kind: "video" | "audio" | null, ext: string | null): string {
+  const k = kind === "video" ? "影片" : kind === "audio" ? "音訊" : "媒體";
+  return ext ? `${k} · ${ext.replace(/^\./, "").toUpperCase()}` : k;
 }
 
 /** 三檔轉錄模式的顯示資訊（實際模型對應在後端 config.MODE_MODELS）。 */

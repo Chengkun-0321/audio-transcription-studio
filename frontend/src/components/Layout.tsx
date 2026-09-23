@@ -1,15 +1,19 @@
 /**
  * 共用外框：深海光暈背景 + 浮動玻璃 header（logo、導覽膠囊、任務抽屜、主題切換）＋ 頁面切換淡入。
  * header 高度維持 h-14（3.5rem）：MediaDetailPage 的 sticky 播放器以 top-14 / top-[5.5rem] 對齊它。
+ * header 內層與 <main> 共用 PAGE_CONTAINER，logo 與頁面內容左右緣對齊。
  */
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useTheme } from "../hooks/useTheme";
 import { springBead } from "../lib/motion";
-import { ThemeWaveIcon } from "./sonar";
+import { ThemeIcon } from "./sonar";
 import { TaskDrawer } from "./TaskDrawer";
 import { Toasts } from "./ui";
+
+/** 全站內容寬度：header 與 main 共用，改這裡兩邊一起變 */
+const PAGE_CONTAINER = "mx-auto w-full max-w-[1400px] px-4 md:px-6";
 
 const nav = [
   {
@@ -58,7 +62,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
       <header className="sticky top-0 z-20 h-14">
         <div aria-hidden className="scroll-edge pointer-events-none absolute inset-x-0 top-0 h-20" />
-        <div className="relative mx-auto grid h-full w-full max-w-6xl grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 md:px-5">
+        <div className={`relative grid h-full grid-cols-[1fr_auto_1fr] items-center gap-2 ${PAGE_CONTAINER}`}>
           <Link
             to="/"
             className="press glass relative flex h-10 items-center gap-2 justify-self-start rounded-full px-2 sm:pr-4"
@@ -117,7 +121,7 @@ export function Layout({ children }: { children: ReactNode }) {
                   exit={{ opacity: 0, y: dark ? 8 : -8 }}
                   transition={{ duration: 0.22 }}
                 >
-                  <ThemeWaveIcon dark={dark} />
+                  <ThemeIcon dark={dark} />
                 </motion.span>
               </AnimatePresence>
             </button>
@@ -128,7 +132,7 @@ export function Layout({ children }: { children: ReactNode }) {
       {/* 頁面載入：淡入＋些微上移 */}
       <motion.main
         key={location.pathname}
-        className="mx-auto w-full max-w-[1600px] flex-1 px-3 py-5 md:px-5 md:py-8"
+        className={`flex-1 py-5 md:py-8 ${PAGE_CONTAINER}`}
         initial={reduced ? false : { opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.32, 0.72, 0, 1] }}

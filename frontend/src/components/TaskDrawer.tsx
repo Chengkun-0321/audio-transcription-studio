@@ -10,7 +10,7 @@ import { api } from "../lib/api";
 import { jobStageLabel, MODE_INFO, type ModeKey } from "../lib/format";
 import { exitFast, spring } from "../lib/motion";
 import { WaveformPulse } from "./sonar";
-import { ProgressBar } from "./ui";
+import { Badge, Button, MetaLine, ProgressBar } from "./ui";
 
 export function TaskDrawer() {
   const { activeJobs, toast, refreshJobs } = useApp();
@@ -34,19 +34,24 @@ export function TaskDrawer() {
       <button
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        aria-label={busy ? `${activeJobs.length} 個任務進行中` : "任務"}
-        className={`press glass relative flex h-10 cursor-pointer items-center gap-2 whitespace-nowrap rounded-full px-3.5 text-sm ${
-          busy ? "text-amber" : "text-fg-muted hover:text-fg"
+        aria-label={busy ? `任務：${activeJobs.length} 個進行中` : "任務"}
+        title="任務"
+        className={`press glass relative flex h-10 cursor-pointer items-center gap-2 whitespace-nowrap rounded-full pl-3 text-sm ${
+          busy ? "pr-2 text-amber" : "pr-3.5 text-fg-muted hover:text-fg"
         }`}
       >
         {busy ? (
-          <>
-            <WaveformPulse size="sm" />
-            <span className="font-mono">{activeJobs.length}</span>
-            <span className="hidden sm:inline">個任務進行中</span>
-          </>
+          <WaveformPulse size="sm" />
         ) : (
-          "任務"
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" aria-hidden>
+            <path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01" />
+          </svg>
+        )}
+        <span className="hidden sm:inline">任務</span>
+        {busy && (
+          <Badge tone="amber" className="font-mono tabular-nums">
+            {activeJobs.length}
+          </Badge>
         )}
       </button>
 
@@ -55,7 +60,7 @@ export function TaskDrawer() {
           <>
             <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
             <motion.div
-              className="glass-strong absolute right-0 z-40 mt-2 w-96 max-w-[calc(100vw-1.5rem)] origin-top-right rounded-3xl p-2"
+              className="glass-strong absolute right-0 z-40 mt-2 w-96 max-w-[calc(100vw-2rem)] origin-top-right rounded-panel p-2"
               initial={{ opacity: 0, scale: 0.92, y: -8 }}
               animate={{ opacity: 1, scale: 1, y: 0, transition: spring }}
               exit={{ opacity: 0, scale: 0.96, y: -4, transition: exitFast }}
@@ -65,37 +70,36 @@ export function TaskDrawer() {
               ) : (
                 <ul className="flex max-h-96 flex-col gap-1.5 overflow-y-auto">
                   {activeJobs.map((job) => (
-                    <li key={job.id} className="rounded-2xl bg-fg/[0.04] p-3">
-                      <div className="mb-1.5 flex items-baseline justify-between gap-2">
+                    <li key={job.id} className="rounded-row bg-fg/[0.04] p-3">
+                      <div className="flex items-center justify-between gap-2">
                         <Link
                           to={`/media/${job.media_id}`}
                           onClick={() => setOpen(false)}
-                          className="truncate text-sm font-medium hover:text-sonar"
+                          className="min-w-0 truncate text-sm font-medium hover:text-sonar"
                         >
                           {job.media_title || job.url || job.media_id}
                         </Link>
-                        <span className="flex shrink-0 items-center gap-2">
-                          <span className="font-mono text-xs text-amber">{job.progress}%</span>
-                          <button
-                            onClick={() => cancel(job.id)}
-                            disabled={job.cancel_requested}
-                            className="press cursor-pointer rounded-full bg-fg/[0.06] px-2.5 py-0.5 text-xs text-fg-muted hover:bg-danger-soft hover:text-danger disabled:opacity-50"
-                            title="終止任務"
-                          >
-                            {job.cancel_requested ? "終止中" : "終止"}
-                          </button>
-                        </span>
+                        <Button
+                          variant="glass-danger"
+                          size="sm"
+                          onClick={() => cancel(job.id)}
+                          disabled={job.cancel_requested}
+                        >
+                          {job.cancel_requested ? "終止中…" : "終止"}
+                        </Button>
                       </div>
-                      <ProgressBar value={job.progress} processing />
-                      <p className="mt-1.5 flex justify-between text-xs text-fg-muted">
-                        <span>
-                          {jobStageLabel(job)}
-                          {job.type === "transcribe" && job.mode
-                            ? ` · ${MODE_INFO[job.mode as ModeKey].name}模式`
-                            : ""}
-                        </span>
-                        {job.speed && <span className="font-mono">{job.speed}</span>}
-                      </p>
+                      <ProgressBar value={job.progress} processing className="mt-2.5" />
+                      <MetaLine
+                        className="mt-2"
+                        items={[
+                          { label: "狀態", value: jobStageLabel(job) },
+                          { label: "進度", value: `${job.progress}%`, mono: true },
+                          job.type === "transcribe" && job.mode
+                            ? { label: "模式", value: MODE_INFO[job.mode as ModeKey].name }
+                            : { label: "類型", value: `下載 ${job.format?.toUpperCase() ?? ""}` },
+                          !!job.speed && { label: "速度", value: job.speed, mono: true },
+                        ]}
+                      />
                     </li>
                   ))}
                 </ul>

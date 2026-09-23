@@ -42,3 +42,4 @@ backend/.venv/bin/python -c "from app.main import app"       # 後端 import 驗
 - 註解與 UI 文案用繁體中文；錯誤訊息要可讀化（見 `downloader._readable_error`）
 - 新增 API 後同步更新 `frontend/src/lib/api.ts` 與 `types.ts`
 - 破壞性操作前端要過 `ConfirmDialog`
+- UI 形狀：容器圓角只用 `rounded-panel`(24) → `rounded-row`(16) → `rounded-tile`(8)，每往內一層 `p-2` 就降一級（同心）；控制項一律 `rounded-full`，高度只用 32/40/48。狀態標籤用 `Badge`、選單用 `Menu`、帶欄位名的資訊用 `MetaLine`/`InfoItem`（都在 `components/ui.tsx`），不要自己手寫
