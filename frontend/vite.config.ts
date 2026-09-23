@@ -26,14 +26,12 @@ export default defineConfig(({ mode }) => {
     "BACKEND_PORT",
   );
 
+  // dev（manage.sh dev）與 preview（manage.sh start 正式模式）共用：後端只綁 127.0.0.1，一律經 proxy
+  const proxy = { "/api": `http://127.0.0.1:${backendPort}` };
+
   return {
     plugins: [react(), tailwindcss()],
-    server: {
-      port: frontendPort,
-      strictPort: true,
-      proxy: {
-        "/api": `http://127.0.0.1:${backendPort}`,
-      },
-    },
+    server: { port: frontendPort, strictPort: true, proxy },
+    preview: { port: frontendPort, strictPort: true, proxy },
   };
 });

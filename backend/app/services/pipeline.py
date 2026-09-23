@@ -5,7 +5,10 @@
 """
 from __future__ import annotations
 
+import gc
+import sys
 import tempfile
+import threading
 import traceback
 from pathlib import Path
 
@@ -13,16 +16,54 @@ from .. import storage
 from . import transcriber
 
 
+# 執行中的轉錄任務數（threadpool 可能同時跑多個）；歸零時釋放模型
+_active_lock = threading.Lock()
+_active_jobs = 0
+
+
 class JobCancelled(Exception):
     """使用者要求終止；在進度回報點拋出以中止整條 pipeline。"""
+
+
+def _release_models() -> None:
+    """釋放 Whisper / pyannote 模型與 MLX Metal 快取，閒置時不佔數 GB 記憶體。
+
+    只清已載入的模組，不為了釋放反而 import mlx/torch；下個任務會從 models/ 重新載入（數秒）。
+    mlx_whisper 的 ModelHolder 是類別層級快取，不清會永久持有最後用過的模型。
+    """
+    holder = sys.modules.get("mlx_whisper.transcribe")
+    if holder is not None:
+        holder.ModelHolder.model = None
+        holder.ModelHolder.model_path = None
+    diarizer = sys.modules.get(f"{__package__}.diarizer")
+    if diarizer is not None:
+        diarizer._pipeline = None
+    gc.collect()  # 先回收陣列，再清掉 MLX 留作重用的 Metal buffer
+    mx = sys.modules.get("mlx.core")
+    if mx is not None:
+        mx.clear_cache()
 
 
 def run_transcribe_job(job_id: str, media_dir: Path) -> None:
     """轉錄任務主流程：denoise（選）→ transcribe → diarize（選）→ 寫 segments.json。
 
     進度依階段權重合成為 0–100 寫回 job JSON；每次寫入同時檢查
-    cancel_requested 旗標，實現協作式取消。
+    cancel_requested 旗標，實現協作式取消。最後一個任務結束時釋放模型。
     """
+    global _active_jobs
+    with _active_lock:
+        _active_jobs += 1
+    try:
+        _run(job_id, media_dir)
+    finally:
+        # 釋放也在鎖內：避免剛開始的新任務載入模型後又被清掉
+        with _active_lock:
+            _active_jobs -= 1
+            if _active_jobs == 0:
+                _release_models()
+
+
+def _run(job_id: str, media_dir: Path) -> None:
     job = storage.get_job(job_id)
     if job is None:
         return

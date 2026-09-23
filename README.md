@@ -7,7 +7,8 @@
 ## 使用
 
 ```bash
-./manage.sh start    # 啟動 → http://localhost:3000
+./manage.sh start    # 啟動 → http://localhost:3000（正式模式，最省資源）
+./manage.sh dev      # 開發模式：前端存檔即時更新（HMR）
 ./manage.sh stop     # 完全關閉，不佔資源
 ./manage.sh status   # 查看狀態
 ./manage.sh logs     # 看日誌

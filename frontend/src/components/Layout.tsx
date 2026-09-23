@@ -1,5 +1,5 @@
 /**
- * 共用外框：深海光暈背景 + 浮動玻璃 header（logo、導覽膠囊、任務抽屜、主題切換）＋ 頁面切換淡入。
+ * 共用外框：深海漸層背景 + 浮動玻璃 header（logo、導覽膠囊、任務抽屜、主題切換）＋ 頁面切換淡入。
  * header 高度維持 h-14（3.5rem）：MediaDetailPage 的 sticky 播放器以 top-14 / top-[5.5rem] 對齊它。
  * header 內層與 <main> 共用 PAGE_CONTAINER，logo 與頁面內容左右緣對齊。
  */
@@ -37,16 +37,9 @@ const nav = [
   },
 ];
 
-/** 深海光暈：四顆緩慢漂移的色球 + 顆粒噪點（樣式在 index.css .ambient） */
+/** 深海背景：靜態漸層 + 顆粒噪點（樣式在 index.css .ambient） */
 function Ambient() {
-  return (
-    <div className="ambient" aria-hidden>
-      <span />
-      <span />
-      <span />
-      <span />
-    </div>
-  );
+  return <div className="ambient" aria-hidden />;
 }
 
 export function Layout({ children }: { children: ReactNode }) {

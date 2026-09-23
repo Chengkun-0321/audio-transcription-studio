@@ -1,7 +1,8 @@
 /**
  * 全域狀態：toast 通知 + 進行中任務輪詢。
  *
- * 輪詢策略：有進行中任務時每 2 秒抓 /api/jobs?active=true，閒置時放慢到 6 秒。
+ * 輪詢策略：有進行中任務時每 2 秒抓 /api/jobs?active=true，閒置時放慢到 10 秒；
+ * 分頁在背景時完全暫停，回到前景立即補抓一次。
  * 任務從 active 集合消失（完成/失敗/終止）時遞增 jobsVersion，
  * 各頁面把它放進 useEffect 依賴即可自動重新抓資料。
  */
@@ -77,18 +78,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     let stopped = false;
     const loop = async () => {
+      clearTimeout(timer);
+      timer = undefined;
       await poll();
-      if (stopped) return;
+      // 分頁在背景時不排下一輪，回到前景由 visibilitychange 重啟
+      if (stopped || document.hidden || timer !== undefined) return;
       // 有進行中任務時 2s 一次；閒置時放慢
-      timer = setTimeout(loop, prevActiveIds.current.size > 0 ? 2000 : 6000);
+      timer = setTimeout(loop, prevActiveIds.current.size > 0 ? 2000 : 10000);
+    };
+    const onVisible = () => {
+      if (!document.hidden) loop();
     };
     loop();
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       stopped = true;
       clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [poll]);
 

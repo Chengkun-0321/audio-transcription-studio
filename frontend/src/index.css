@@ -9,7 +9,7 @@
  *   高度只用 sm 32 / md 40 / lg 48 三級，同一列的控制項才對得齊。
  *
  * 材質分層（依 Apple Liquid Glass 原則）：
- *   ambient  —— 最底層的深海光暈背景，玻璃要有東西可透才有質感
+ *   ambient  —— 最底層的深海漸層背景（靜態，不做持續動畫以免玻璃每幀重算模糊）
  *   surface  —— 內容層（卡片、列表），半透明但不做 backdrop-filter，避免長列表卡頓
  *   glass-*  —— 導覽與控制層（header、彈窗、抽屜、toast），真正的模糊＋折射高光 */
 @import "tailwindcss";
@@ -60,11 +60,7 @@
   --field-bg: rgba(255, 255, 255, 0.55);
   --field-inset: inset 0 1px 2px rgba(15, 35, 55, 0.08);
 
-  /* 深海光暈 */
-  --orb-a: rgba(15, 156, 143, 0.3);
-  --orb-b: rgba(80, 150, 255, 0.3);
-  --orb-c: rgba(150, 120, 255, 0.22);
-  --orb-d: rgba(255, 170, 110, 0.22);
+  /* 深海背景顆粒 */
   --grain-opacity: 0.05;
   --scrim: rgba(20, 35, 50, 0.22);
 
@@ -115,10 +111,6 @@
   --field-bg: rgba(0, 0, 0, 0.28);
   --field-inset: inset 0 1px 3px rgba(0, 0, 0, 0.45);
 
-  --orb-a: rgba(62, 217, 196, 0.22);
-  --orb-b: rgba(40, 95, 210, 0.3);
-  --orb-c: rgba(115, 80, 225, 0.22);
-  --orb-d: rgba(242, 166, 90, 0.1);
   --grain-opacity: 0.07;
   --scrim: rgba(0, 0, 0, 0.5);
 }
@@ -193,7 +185,7 @@ input[type="checkbox"] {
   }
 }
 
-/* ---------- 深海光暈背景（Layout 的 <Ambient />） ---------- */
+/* ---------- 深海背景（Layout 的 <Ambient />） ---------- */
 
 .ambient {
   position: fixed;
@@ -204,41 +196,6 @@ input[type="checkbox"] {
   background: radial-gradient(120% 80% at 50% 0%, var(--ink) 0%, var(--ink-deep) 100%);
 }
 
-.ambient > span {
-  position: absolute;
-  width: 70vmax;
-  height: 70vmax;
-  border-radius: 9999px;
-  will-change: transform;
-  animation: orb-drift 42s ease-in-out infinite alternate;
-}
-
-.ambient > span:nth-child(1) {
-  top: -32vmax;
-  left: -18vmax;
-  background: radial-gradient(circle, var(--orb-a) 0%, transparent 62%);
-}
-.ambient > span:nth-child(2) {
-  top: -24vmax;
-  right: -26vmax;
-  background: radial-gradient(circle, var(--orb-b) 0%, transparent 62%);
-  animation-duration: 54s;
-  animation-direction: alternate-reverse;
-}
-.ambient > span:nth-child(3) {
-  bottom: -40vmax;
-  left: 10vmax;
-  background: radial-gradient(circle, var(--orb-c) 0%, transparent 62%);
-  animation-duration: 64s;
-}
-.ambient > span:nth-child(4) {
-  bottom: -38vmax;
-  right: -30vmax;
-  background: radial-gradient(circle, var(--orb-d) 0%, transparent 62%);
-  animation-duration: 48s;
-  animation-direction: alternate-reverse;
-}
-
 /* 顆粒噪點：打散漸層色階斷層，也讓玻璃更有實體感 */
 .ambient::after {
   content: "";
@@ -246,18 +203,6 @@ input[type="checkbox"] {
   inset: 0;
   opacity: var(--grain-opacity);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
-@keyframes orb-drift {
-  0% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(6vmax, 4vmax, 0) scale(1.08);
-  }
-  100% {
-    transform: translate3d(-4vmax, 7vmax, 0) scale(0.96);
-  }
 }
 
 /* ---------- 玻璃材質 ---------- */
@@ -321,7 +266,7 @@ input[type="checkbox"] {
   }
 }
 
-/* 內容卡片：不做 backdrop-filter（背景本身已是柔焦光暈，半透明即有霧面感） */
+/* 內容卡片：不做 backdrop-filter（背景本身已是柔和漸層，半透明即有霧面感） */
 @utility glass-card {
   @apply glass-rim;
   background: linear-gradient(180deg, var(--glass-sheen), transparent 30%), var(--surface);
@@ -428,6 +373,23 @@ input[type="checkbox"] {
   mask-image: linear-gradient(180deg, #000 45%, transparent);
 }
 
+/* 逐字稿列（動輒上千句）：畫面外的列跳過樣式/排版/繪製，auto 會記住渲染過的實際高度。
+ * 預估的是內容高度（padding 另計）= 單行句 text-sm × leading-relaxed = 22.75px，整列 38.75px。
+ * 必須貼近實際值：播放跟隨用 getBoundingClientRect 算捲動目標，估錯會隨跳過的列數累積 */
+@utility offscreen-skip {
+  content-visibility: auto;
+  contain-intrinsic-size: auto calc(0.875rem * 1.625);
+}
+
+/* 主題切換瞬間（useTheme 加上）停用所有 transition：CSS 變數一換，
+ * 帶 transition-colors 的元素會各自啟動顏色動畫，長逐字稿頁實測 6 千多個同時跑 */
+.theme-switching,
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+  transition: none !important;
+}
+
 /* 主題切換：以 View Transitions 做圓形擴散，關掉預設交叉淡入 */
 ::view-transition-old(root),
 ::view-transition-new(root) {
@@ -436,7 +398,6 @@ input[type="checkbox"] {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ambient > span,
   .shimmer,
   .rise-in {
     animation: none;

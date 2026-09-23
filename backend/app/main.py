@@ -4,6 +4,8 @@
 由 manage.sh 依根目錄 .env 的 BACKEND_PORT 啟動 uvicorn。
 只綁 127.0.0.1——單人本地工具，不對外開放。
 """
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -12,6 +14,16 @@ from .routers import folders, jobs, media
 
 # 啟動時確保 data/library 與 data/inbox 存在（檔案系統即資料庫，見 storage.py）
 config.ensure_dirs()
+
+
+class _SkipJobPolling(logging.Filter):
+    """前端全域輪詢的 access log 不記：否則每幾秒一行，淹沒真正有用的紀錄。"""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "/api/jobs?active=true" not in record.getMessage()
+
+
+logging.getLogger("uvicorn.access").addFilter(_SkipJobPolling())
 
 app = FastAPI(title="本地語音轉錄工具", version="1.0.0")
 

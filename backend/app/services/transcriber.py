@@ -11,7 +11,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable, Optional
 
-import mlx_whisper
 import numpy as np
 
 from ..config import MODE_MODELS
@@ -96,6 +95,8 @@ def transcribe(
     language: None=自動偵測（第一塊偵測後鎖定）；"zh"/"en"/... 指定語言
     on_progress: 每完成一塊回報 0.0–1.0（以語音秒數計，真實進度）
     """
+    import mlx_whisper  # 延遲 import：閒置時不佔 ~130MB（numba/scipy/mlx）
+
     model = MODE_MODELS[mode]
     audio = load_audio(media_path)
     total = len(audio) / SAMPLE_RATE

@@ -17,9 +17,15 @@ export function useTheme() {
 
   const toggle = useCallback((origin?: { x: number; y: number }) => {
     const apply = () => {
-      const next = !document.documentElement.classList.contains("dark");
-      document.documentElement.classList.toggle("dark", next);
+      const root = document.documentElement;
+      // 切換瞬間停用全站 transition：逐字稿上千句的 transition-colors 會同時啟動數千個顏色動畫而卡頓
+      root.classList.add("theme-switching");
+      const next = !root.classList.contains("dark");
+      root.classList.toggle("dark", next);
       flushSync(() => setDark(next));
+      // 強制在停用狀態下完成樣式重算；之後恢復 transition 時顏色已是新值，不會再觸發動畫
+      void document.body.offsetHeight;
+      root.classList.remove("theme-switching");
     };
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (!document.startViewTransition || reduced || !origin) {

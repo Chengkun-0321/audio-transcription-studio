@@ -843,7 +843,7 @@ export function MediaDetailPage() {
                     <div
                       key={idx}
                       data-seg={idx}
-                      className={`group relative flex gap-3 rounded-row px-3 py-2 transition-colors ${
+                      className={`offscreen-skip group relative flex gap-3 rounded-row px-3 py-2 transition-colors ${
                         playing ? "bg-sonar-soft" : "hover:bg-fg/[0.04]"
                       }`}
                     >
@@ -883,7 +883,8 @@ export function MediaDetailPage() {
                           toast("已複製", "success");
                         }}
                         // -my-1.5：按鈕 32px 比單行文字高，負邊距避免撐高每一列
-                        className="-my-1.5 self-start opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                        // outline-offset-0：列有 content-visibility（paint containment），預設 2px 外框會被裁掉上緣
+                        className="-my-1.5 self-start opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-offset-0"
                       >
                         <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2}>
                           <rect x="9" y="9" width="11" height="11" rx="2" />

@@ -9,10 +9,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 常用指令
 
 ```bash
-./manage.sh start      # 啟動前後端 → http://localhost:3000
+./manage.sh start      # 正式模式（日常用）→ http://localhost:3000：前端有變動才 vite build，再以 vite preview 提供
+./manage.sh dev        # 開發模式：前端跑 Vite dev server（HMR）
 ./manage.sh stop       # 完全關閉
-./manage.sh restart    # 後端程式碼變更後必須（uvicorn 未開 --reload）；前端有 Vite HMR 通常不用
-./manage.sh status     # 查看 pid 狀態
+./manage.sh restart    # 沿用上次模式重啟；後端改動必須（uvicorn 未開 --reload），正式模式下前端改動也要
+./manage.sh status     # 查看 pid 與前端模式
 ./manage.sh logs       # 兩邊最後 40 行日誌（.run/*.log）
 
 cd frontend && npx tsc -b                                    # 前端型別檢查（npm run build = tsc -b + vite build）
@@ -33,6 +34,7 @@ cd backend && .venv/bin/python -c "from app.main import app" # 後端 import 驗
 - 轉錄流程：`denoise`（選，Rust `deep-filter`）→ `transcriber`（ffmpeg 解碼 16k → silero-vad 切段 → ≤120s 塊逐塊 mlx-whisper → 時間戳映射回原軸）→ `diarize`（選，pyannote）→ 寫 `segments.json`
   - VAD 語音覆蓋率 <20%（歌曲/音樂）時放棄 VAD 整段均分；`auto` 語言在第一塊偵測後鎖定
   - 說話者識別刻意吃**原始檔**而非降噪檔；`denoiser`/`diarizer` 在 pipeline 內延遲 import（torch 不用不載）
+  - **閒置省資源**：`mlx_whisper` 在 `transcribe()` 內才 import（頂層 import 會讓閒置後端多 ~130MB）；轉錄任務數歸零時 `pipeline._release_models()` 清掉 mlx `ModelHolder`、pyannote pipeline 與 MLX Metal 快取（否則常駐 1.5–3GB+）。下個任務重載模型約數秒
   - 進度權重 denoise 15 / transcribe 70 / diarize 25，未開啟的階段不佔比
 - `segments.json` 是轉錄結果的單一真實來源，TXT/SRT/DOCX 由 `exporter.py` 即時產生，不存副本
 
@@ -53,7 +55,7 @@ cd backend && .venv/bin/python -c "from app.main import app" # 後端 import 驗
 ### 前端 `frontend/src/`（Vite 7 + React 19 + Tailwind 4 + framer-motion，Node 22）
 
 - 路由：`/` 下載器、`/library` 媒體庫、`/media/:id` 播放器 + 逐字稿
-- `AppContext`：全域 toast + 每 2s（活躍）/6s（閒置）輪詢 `/api/jobs?active=true`；任務離開 active 集合時 `jobsVersion++`，頁面把它放進 `useEffect` 依賴即自動刷新；建立/終止任務後呼叫 `refreshJobs()`
+- `AppContext`：全域 toast + 每 2s（活躍）/10s（閒置）輪詢 `/api/jobs?active=true`，分頁隱藏時暫停、回前景立即補抓（後端 access log 已過濾此輪詢）；任務離開 active 集合時 `jobsVersion++`，頁面把它放進 `useEffect` 依賴即自動刷新；建立/終止任務後呼叫 `refreshJobs()`
 - `lib/api.ts` 一律用相對路徑 `/api`（Vite proxy 轉後端）；上傳用 XHR 取得進度
 - 前端綁 `0.0.0.0`（區網可連），後端只綁 `127.0.0.1`——區網存取靠 Vite proxy，不要讓前端直連後端 Port
 
@@ -75,6 +77,7 @@ cd backend && .venv/bin/python -c "from app.main import app" # 後端 import 驗
 - 新增 API 後同步更新 `frontend/src/lib/api.ts` 與 `types.ts`
 - 破壞性操作前端要過 `ConfirmDialog`
 - **顏色**：只用 `index.css` 的 CSS 變數（經 `@theme inline` 變成 `bg-surface`、`text-sonar` 等 utility），元件內不寫色票；主題由 `useTheme` 切 `.dark` class，不跟隨系統
-- **玻璃材質**：導覽/控制層用 `glass`，疊在內容上的彈窗/抽屜/toast 用 `glass-strong`，內容卡片用 `glass-card`（無 backdrop-filter，避免長列表卡頓）；`glass-rim` 需要定位元素
+- **玻璃材質**：導覽/控制層用 `glass`，疊在內容上的彈窗/抽屜/toast 用 `glass-strong`，內容卡片用 `glass-card`（無 backdrop-filter，避免長列表卡頓）；`glass-rim` 需要定位元素。背景 `.ambient` 是靜態漸層 + 顆粒，**不要加常駐動畫**（玻璃的 backdrop-filter 會每幀重算，閒置也耗 GPU）
 - **UI 形狀**：容器圓角只用 `rounded-panel`(24) → `rounded-row`(16) → `rounded-tile`(8)，每往內一層 `p-2` 就降一級（同心）；控制項一律 `rounded-full`，高度只用 32/40/48。狀態標籤用 `Badge`、選單用 `Menu`、帶欄位名的資訊用 `MetaLine`/`InfoItem`（都在 `components/ui.tsx`），不要自己手寫
+- **長列表效能**：切主題時 `useTheme` 會加 `.theme-switching` 暫停全站 transition（否則逐字稿上千句會同時啟動數千個顏色動畫）；逐字稿列用 `offscreen-skip`（`content-visibility: auto`），其預估高度 = 單行句內容高，**改列的字級/行高時要同步改**，否則播放跟隨捲動會偏移
 - 可拖曳歸檔的列表項目不要用 `motion.li`（framer-motion 會接管 `onDragStart` 破壞原生拖曳），進場動畫改用 CSS `rise-in`
