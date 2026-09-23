@@ -95,12 +95,10 @@ Git clone 不會下載 AI 模型，模型會在功能第一次使用時按需下
 
 | 功能 | 模型 | 下載時機 |
 |---|---|---|
-| 獵豹 | `mlx-community/whisper-small-mlx` | 第一次用獵豹轉譯 |
-| 海豚 | `mlx-community/whisper-large-v3-turbo` | 第一次用海豚轉譯 |
-| 鯨魚 | `mlx-community/whisper-large-v3-mlx` | 第一次用鯨魚轉譯 |
+| Whisper 轉錄 | `mlx-community/whisper-<模型>-mlx`（tiny／base／small／medium／large-v2／large-v3），`mlx-community/whisper-large-v3-turbo`（預設） | 第一次用該模型轉錄，或在「模型」頁按下載 |
 | 說話者識別 | `pyannote/speaker-diarization-community-1` 及相依模型 | 第一次勾選說話者識別 |
 
-下載完成後會重用本機模型；正常情況下不會再次下載。`HF_TOKEN` 只授權 Pyannote gated model，不會安裝 Python、Node.js、FFmpeg，也不會預先下載全部模型。
+下載完成後會重用本機模型；正常情況下不會再次下載。Whisper 模型可在「模型」頁查看佔用空間、取消下載或刪除，刪除後下次使用會重新下載。`HF_TOKEN` 只授權 Pyannote gated model，不會安裝 Python、Node.js、FFmpeg，也不會預先下載全部模型。
 
 ## 5. 首次啟用說話者識別
 

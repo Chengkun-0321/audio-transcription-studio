@@ -1,5 +1,5 @@
 /** 後端 API 的型別化包裝。所有請求走相對路徑 /api，由 Vite proxy 轉送。 */
-import type { Folder, Job, Media, Transcript } from "./types";
+import type { Folder, Job, Media, Transcript, WhisperModel } from "./types";
 
 /** fetch 包裝：非 2xx 時把後端的 detail 轉成可讀的 Error message。 */
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -53,7 +53,7 @@ export const api = {
 
   createJob: (opts: {
     media_id: string;
-    mode: string;
+    model: string;
     language: string;
     diarization: boolean;
     num_speakers: number | null;
@@ -65,6 +65,14 @@ export const api = {
   getSegments: (jobId: string) => request<Transcript>(`/api/jobs/${jobId}/segments`),
   transcriptUrl: (jobId: string, format: "txt" | "srt" | "docx", timestamps = true) =>
     `/api/jobs/${jobId}/transcript?format=${format}${timestamps ? "" : "&timestamps=false"}`,
+
+  listModels: () => request<WhisperModel[]>("/api/models"),
+  downloadModel: (key: string) =>
+    request<{ ok: boolean }>(`/api/models/${encodeURIComponent(key)}/download`, { method: "POST" }),
+  cancelModelDownload: (key: string) =>
+    request<{ ok: boolean }>(`/api/models/${encodeURIComponent(key)}/cancel`, { method: "POST" }),
+  deleteModel: (key: string) =>
+    request<{ ok: boolean }>(`/api/models/${encodeURIComponent(key)}`, { method: "DELETE" }),
 };
 
 /** 檔案上傳：用 XHR 而非 fetch，因為 fetch 拿不到 upload progress 事件。 */

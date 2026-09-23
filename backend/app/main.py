@@ -1,6 +1,6 @@
 """FastAPI 應用程式入口。
 
-組裝三個 router（media / folders / jobs）並掛上 CORS。
+組裝四個 router（media / folders / jobs / models）並掛上 CORS。
 由 manage.sh 依根目錄 .env 的 BACKEND_PORT 啟動 uvicorn。
 只綁 127.0.0.1——單人本地工具，不對外開放。
 """
@@ -10,20 +10,23 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import config
-from .routers import folders, jobs, media
+from .routers import folders, jobs, media, models
 
 # 啟動時確保 data/library 與 data/inbox 存在（檔案系統即資料庫，見 storage.py）
 config.ensure_dirs()
 
 
-class _SkipJobPolling(logging.Filter):
-    """前端全域輪詢的 access log 不記：否則每幾秒一行，淹沒真正有用的紀錄。"""
+class _SkipPolling(logging.Filter):
+    """前端輪詢的 access log 不記：否則每幾秒一行，淹沒真正有用的紀錄。"""
+
+    _PATHS = ("/api/jobs?active=true", '"GET /api/models ')
 
     def filter(self, record: logging.LogRecord) -> bool:
-        return "/api/jobs?active=true" not in record.getMessage()
+        msg = record.getMessage()
+        return not any(p in msg for p in self._PATHS)
 
 
-logging.getLogger("uvicorn.access").addFilter(_SkipJobPolling())
+logging.getLogger("uvicorn.access").addFilter(_SkipPolling())
 
 app = FastAPI(title="本地語音轉錄工具", version="1.0.0")
 
@@ -41,6 +44,7 @@ app.add_middleware(
 app.include_router(media.router)    # 媒體：上傳、YouTube 下載、播放串流、改名、搬移、刪除
 app.include_router(folders.router)  # 資料夾：列表、建立、改名、刪除
 app.include_router(jobs.router)     # 任務：建立轉錄、查進度、終止、取結果、匯出
+app.include_router(models.router)   # 模型：Whisper 模型清單、預先下載、取消、刪除
 
 
 @app.get("/api/health")

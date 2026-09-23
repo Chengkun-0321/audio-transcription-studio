@@ -91,7 +91,7 @@ def to_docx(segments: list[dict], title: str, meta: dict,
     run = info.add_run(
         f"時長 {_ts_short(meta.get('duration_seconds') or 0)}　"
         f"語言 {meta.get('language', '—')}　"
-        f"轉錄模式 {meta.get('mode', '—')}　"
+        f"模型 {meta.get('model') or '—'}　"
         f"建立於 {meta.get('created_at', '—')}"
     )
     run.font.size = Pt(9)

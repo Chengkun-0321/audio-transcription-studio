@@ -35,6 +35,16 @@ const nav = [
       </svg>
     ),
   },
+  {
+    to: "/models",
+    label: "模型",
+    icon: (
+      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden>
+        <rect x="6" y="6" width="12" height="12" rx="2.5" />
+        <path d="M9.5 2.5v3.5M14.5 2.5v3.5M9.5 18v3.5M14.5 18v3.5M2.5 9.5H6M2.5 14.5H6M18 9.5h3.5M18 14.5h3.5" strokeLinecap="round" />
+      </svg>
+    ),
+  },
 ];
 
 /** 深海背景：靜態漸層 + 顆粒噪點（樣式在 index.css .ambient） */
@@ -47,7 +57,11 @@ export function Layout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const reduced = useReducedMotion();
   // 媒體詳細頁歸在「媒體庫」底下
-  const activeTo = /^\/(library|media)/.test(location.pathname) ? "/library" : "/";
+  const activeTo = /^\/(library|media)/.test(location.pathname)
+    ? "/library"
+    : location.pathname.startsWith("/models")
+      ? "/models"
+      : "/";
 
   return (
     <div className="flex min-h-full flex-col">
@@ -90,7 +104,8 @@ export function Layout({ children }: { children: ReactNode }) {
                   )}
                   <span className={`relative flex items-center gap-1.5 ${active ? "[&>svg]:text-sonar" : ""}`}>
                     {n.icon}
-                    <span className="whitespace-nowrap">{n.label}</span>
+                    {/* 手機寬度放不下三個完整項目：未選中的只留圖示（文字留給螢幕閱讀器） */}
+                    <span className={`whitespace-nowrap ${active ? "" : "max-sm:sr-only"}`}>{n.label}</span>
                   </span>
                 </Link>
               );

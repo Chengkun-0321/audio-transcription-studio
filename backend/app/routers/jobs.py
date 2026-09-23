@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 class JobReq(BaseModel):
     media_id: str
-    mode: str = "dolphin"          # cheetah | dolphin | whale（規格 §3.2）
+    model: str = config.DEFAULT_MODEL  # config.WHISPER_MODELS 的 key
     language: str = "auto"         # auto | zh | en | ...
     diarization: bool = False
     denoise: bool = False
@@ -28,8 +28,8 @@ class JobReq(BaseModel):
 @router.post("")
 def create_job(req: JobReq, background: BackgroundTasks):
     """建立轉錄任務，立即回傳 job；實際轉錄在 BackgroundTasks threadpool 執行。"""
-    if req.mode not in config.MODE_MODELS:
-        raise HTTPException(400, f"未知的轉錄模式: {req.mode}")
+    if req.model not in config.WHISPER_MODELS:
+        raise HTTPException(400, f"未知的模型: {req.model}")
     media_dir = storage.find_media_dir(req.media_id)
     if media_dir is None:
         raise HTTPException(404, "找不到此媒體")
@@ -37,7 +37,7 @@ def create_job(req: JobReq, background: BackgroundTasks):
         raise HTTPException(400, "媒體檔尚未就緒（可能還在下載中）")
     job = storage.create_job(
         media_dir, "transcribe",
-        mode=req.mode, language=req.language,
+        model=req.model, language=req.language,
         diarization=req.diarization, denoise=req.denoise,
         num_speakers=req.num_speakers if req.diarization else None,
     )
@@ -116,7 +116,7 @@ def transcript(job_id: str, format: str = "txt", timestamps: bool = True):
         data = exporter.to_docx(segments, title, {
             "duration_seconds": meta.get("duration_seconds"),
             "language": job.get("detected_language") or job.get("language"),
-            "mode": job.get("mode"),
+            "model": job.get("model") or config.LEGACY_MODES.get(job.get("mode")),
             "created_at": job.get("created_at"),
         }, timestamps=timestamps, language=language)
         return Response(

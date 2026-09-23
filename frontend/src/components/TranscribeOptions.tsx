@@ -1,20 +1,18 @@
 /**
- * 轉錄設定表單：語言（常用膠囊＋其他下拉）、三檔模式卡片（選中框彈簧滑動）、
+ * 轉錄設定表單：語言（常用膠囊＋其他下拉）、Whisper 模型（下拉＋本機下載狀態）、
  * 進階摺疊區（說話者識別＋人數／音訊修復，iOS 設定列樣式）。上傳彈窗與媒體詳細頁共用。
  */
 import { motion } from "framer-motion";
-import { useId, useState } from "react";
-import {
-  COMMON_LANGUAGES,
-  MODE_INFO,
-  OTHER_LANGUAGES,
-  type ModeKey,
-} from "../lib/format";
-import { springBead } from "../lib/motion";
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { api } from "../lib/api";
+import { COMMON_LANGUAGES, OTHER_LANGUAGES, fmtBytes } from "../lib/format";
+import type { WhisperModel } from "../lib/types";
 import { Select, Switch } from "./ui";
 
 export interface TranscribeSettings {
-  mode: ModeKey;
+  /** Whisper 模型 key（WhisperModel.key） */
+  model: string;
   language: string;
   diarization: boolean;
   /** 說話者人數；null = 自動判斷（僅說話者識別開啟時送出） */
@@ -22,22 +20,38 @@ export interface TranscribeSettings {
   denoise: boolean;
 }
 
-export const DEFAULT_SETTINGS: TranscribeSettings = {
-  mode: "dolphin",
-  language: "auto",
-  diarization: false,
-  num_speakers: null,
-  denoise: false,
-};
+/** 與後端 config.DEFAULT_MODEL 相同；清單載入後若不存在會改用清單標示的預設 */
+const DEFAULT_MODEL = "large-v3-turbo";
+/** 上次選的模型存在 localStorage（個人偏好；讀寫失敗就用預設） */
+const MODEL_KEY = "whisper-model";
+/** 大型模型：選取時提醒記憶體壓力 */
+const LARGE_MODELS = new Set(["large-v2", "large-v3"]);
+
+/** 預設設定：模型沿用上次選擇。用函式而非常數，每次開表單才讀 localStorage。 */
+export function defaultSettings(): TranscribeSettings {
+  let model = DEFAULT_MODEL;
+  try {
+    model = localStorage.getItem(MODEL_KEY) || DEFAULT_MODEL;
+  } catch {
+    /* 無痕模式等情況讀不到，用預設 */
+  }
+  return { model, language: "auto", diarization: false, num_speakers: null, denoise: false };
+}
 
 const SPEAKER_COUNTS = [2, 3, 4, 5, 6, 7, 8, 9, 10];
 
-const MODE_GLYPHS: Record<ModeKey, string> = {
-  // 極簡線條速度感：一 / 二 / 三 道波
-  cheetah: "M2 12h20M6 8h12",
-  dolphin: "M2 9h20M2 15h14",
-  whale: "M2 7h20M2 12h20M2 17h14",
-};
+/** 下拉選項文字：「large-v3-turbo（推薦）· 1.6 GB · 已下載」 */
+function optionLabel(m: WhisperModel) {
+  const state = m.status === "downloaded" ? " · 已下載" : m.status === "downloading" ? " · 下載中" : "";
+  return `${m.key}${m.default ? "（推薦）" : ""} · ${fmtBytes(m.download_mb * 1e6)}${state}`;
+}
+
+/** 選中模型下方的狀態說明 */
+function statusText(m: WhisperModel) {
+  if (m.status === "downloaded") return "已下載，可直接使用。";
+  if (m.status === "downloading") return `下載中 ${m.progress ?? 0}%，轉錄會等下載完成後開始。`;
+  return `尚未下載，第一次使用會自動下載約 ${fmtBytes(m.download_mb * 1e6)}。`;
+}
 
 const chip = (active: boolean) =>
   `press h-8 cursor-pointer rounded-full px-3.5 text-sm transition-colors ${
@@ -53,11 +67,34 @@ export function TranscribeOptions({
   value: TranscribeSettings;
   onChange: (v: TranscribeSettings) => void;
 }) {
-  const modeBeadId = useId();
+  const [models, setModels] = useState<WhisperModel[]>([]);
   const [showOthers, setShowOthers] = useState(
     OTHER_LANGUAGES.some((l) => l.code === value.language),
   );
   const [showAdvanced, setShowAdvanced] = useState(value.diarization || value.denoise);
+
+  useEffect(() => {
+    api.listModels().then(setModels).catch(() => {});
+  }, []);
+
+  // 記住的模型已不在清單（清單改版）時換成預設，避免送出後被後端拒絕
+  useEffect(() => {
+    if (models.length && !models.some((m) => m.key === value.model)) {
+      const fallback = models.find((m) => m.default) ?? models[0];
+      onChange({ ...value, model: fallback.key });
+    }
+  }, [models, value, onChange]);
+
+  const selectModel = (model: string) => {
+    onChange({ ...value, model });
+    try {
+      localStorage.setItem(MODEL_KEY, model);
+    } catch {
+      /* 存不了就只影響這次 */
+    }
+  };
+
+  const current = models.find((m) => m.key === value.model);
 
   return (
     <div className="flex flex-col gap-5">
@@ -99,55 +136,31 @@ export function TranscribeOptions({
         </div>
       </div>
 
-      {/* 三檔模式 */}
+      {/* Whisper 模型 */}
       <div>
-        <p className="mb-2 text-xs font-medium tracking-wide text-fg-muted">轉錄模式</p>
-        <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="轉錄模式">
-          {(Object.keys(MODE_INFO) as ModeKey[]).map((m) => {
-            const active = value.mode === m;
-            return (
-              <button
-                key={m}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                onClick={() => onChange({ ...value, mode: m })}
-                className={`press relative flex cursor-pointer flex-col items-start gap-1 rounded-row p-3 text-left transition-colors ${
-                  active ? "" : "bg-fg/[0.04] hover:bg-fg/[0.07]"
-                }`}
-              >
-                {active && (
-                  <motion.span
-                    layoutId={`mode-${modeBeadId}`}
-                    className="absolute inset-0 rounded-row bg-sonar-soft shadow-[inset_0_0_0_1.5px_var(--sonar),0_8px_24px_-12px_var(--sonar)]"
-                    transition={springBead}
-                  />
-                )}
-                <span className="relative flex w-full items-center justify-between">
-                  <span className={`font-display text-sm font-semibold ${active ? "text-sonar" : ""}`}>
-                    {MODE_INFO[m].name}
-                  </span>
-                  <svg
-                    viewBox="0 0 24 24"
-                    className={`h-4 w-4 ${active ? "text-sonar" : "text-fg-muted"}`}
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                    strokeLinecap="round"
-                    aria-hidden
-                  >
-                    <path d={MODE_GLYPHS[m]} />
-                  </svg>
-                </span>
-                <span className="relative text-xs leading-snug text-fg-muted">{MODE_INFO[m].tagline}</span>
-                <span className="relative font-mono text-[10px] text-fg-muted/70">{MODE_INFO[m].model}</span>
-              </button>
-            );
-          })}
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <label htmlFor="whisper-model" className="text-xs font-medium tracking-wide text-fg-muted">
+            Whisper 模型
+          </label>
+          <Link to="/models" className="text-xs text-fg-muted hover:text-sonar">
+            管理模型
+          </Link>
         </div>
-        {value.mode === "whale" && (
-          <p className="mt-2 text-xs leading-relaxed text-fg-muted">
-            鯨魚使用最大模型，同時開著其他大型程式時可能感受到記憶體壓力。
+        <Select id="whisper-model" value={value.model} onChange={(e) => selectModel(e.target.value)}>
+          {models.length === 0 ? (
+            <option value={value.model}>{value.model}</option>
+          ) : (
+            models.map((m) => (
+              <option key={m.key} value={m.key}>
+                {optionLabel(m)}
+              </option>
+            ))
+          )}
+        </Select>
+        {current && (
+          <p className="mt-2 px-1 text-xs leading-relaxed text-fg-muted">
+            {current.note}。{statusText(current)}
+            {LARGE_MODELS.has(current.key) && "大型模型在同時開著其他大型程式時可能感受到記憶體壓力。"}
           </p>
         )}
       </div>

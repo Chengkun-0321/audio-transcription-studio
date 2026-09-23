@@ -1,8 +1,8 @@
-"""轉錄任務編排：denoise → transcribe（‖ diarize）→ 寫入 segments.json。
+"""轉錄任務編排：fetch_model（首次使用）→ denoise → transcribe（‖ diarize）→ 寫入 segments.json。
 
 在 FastAPI BackgroundTasks 的 threadpool 執行（同步函式）。轉錄任務一次只跑一個
 （_job_lock 排隊）：GPU 本來就是瓶頸，並行只會讓模型與 activation 疊加佔記憶體，
-且 mlx_whisper 的 ModelHolder 只有一個槽位，不同模式交錯會每塊重載模型。
+且 mlx_whisper 的 ModelHolder 只有一個槽位，不同模型交錯會每塊重載模型。
 開啟說話者識別時，pyannote 在子行程與 Whisper 同時跑（diarizer.Diarization）。
 每個階段依權重把 0–100 的進度寫回 job JSON 供前端輪詢；只有主執行緒寫 job 檔。
 """
@@ -16,7 +16,7 @@ import traceback
 from pathlib import Path
 
 from .. import storage
-from . import transcriber
+from . import models, transcriber
 from .audio import load_audio
 
 
@@ -49,7 +49,7 @@ def _release_models() -> None:
 
 
 def run_transcribe_job(job_id: str, media_dir: Path) -> None:
-    """轉錄任務主流程：排隊 → denoise（選）→ transcribe ‖ diarize（選）→ 寫 segments.json。
+    """轉錄任務主流程：排隊 → 下載模型（首次）→ denoise（選）→ transcribe ‖ diarize（選）→ 寫 segments.json。
 
     進度依階段權重合成為 0–100 寫回 job JSON；每次寫入同時檢查
     cancel_requested 旗標，實現協作式取消。最後一個任務結束時釋放模型。
@@ -93,7 +93,9 @@ def _run(job_id: str, media_dir: Path) -> None:
     src = storage.source_file(media_dir)
 
     # 進度權重：有開的階段才佔比例；說話者識別與轉錄並行，進度取各階段完成度的加權和
-    weights = {"denoise": 15 if job["denoise"] else 0,
+    fetch = models.local_path(job["model"]) is None  # 首次使用：先下載模型
+    weights = {"fetch_model": 30 if fetch else 0,
+               "denoise": 15 if job["denoise"] else 0,
                "transcribe": 70,
                "diarize": 25 if job["diarization"] else 0}
     total_w = sum(weights.values())
@@ -124,6 +126,13 @@ def _run(job_id: str, media_dir: Path) -> None:
             # 用原始檔而非降噪檔做 diarization（speaker embedding 對原聲更穩）
             diar = diarizer.Diarization(src, job.get("num_speakers"))
 
+        # 下載失敗就不必再花時間降噪；已下載時直接回傳本機路徑，不連網
+        if fetch:
+            report("fetch_model", 0.0)
+        model_path = models.ensure(job["model"], on_progress=lambda f: report("fetch_model", f))
+        if fetch:
+            report("fetch_model", 1.0)
+
         if job["denoise"]:
             from . import denoiser  # 延遲 import：不用不載
             report("denoise", 0.0)
@@ -137,7 +146,7 @@ def _run(job_id: str, media_dir: Path) -> None:
         # 先標上階段：載入模型＋第一塊可能要數十秒，stage 空著前端會顯示成「排隊中」
         report("transcribe", 0.0)
         result = transcriber.transcribe(
-            speech, job["mode"], lang,
+            speech, model_path, lang,
             on_progress=lambda f: report("transcribe", f),
         )
         del speech

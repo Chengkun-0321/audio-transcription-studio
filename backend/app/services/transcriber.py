@@ -6,7 +6,7 @@
    mlx-whisper，每塊完成即回報進度（真實進度，非動畫）
 3. 時間戳映射回原始時間軸；濾掉字幕殘留幻覺句與重複迴圈；中文結果用 OpenCC s2twp 轉繁體
 
-刻意不用的 Whisper 選項（實測鯨魚模式會議錄音）：
+刻意不用的 Whisper 選項（實測 large-v3 會議錄音）：
 - initial_prompt 帶上一塊結尾：推理慢 2.6 倍、句子黏成 30 秒一段，還把上一塊的錯字帶進下一塊
 - hallucination_silence_threshold：會整句漏掉真實的短語音、慢 15%；靜音幻覺已由 VAD 處理
 """
@@ -15,11 +15,12 @@ from __future__ import annotations
 import gc
 import re
 from itertools import groupby
+from pathlib import Path
 from typing import Callable, Optional
 
 import numpy as np
 
-from ..config import MLX_CACHE_LIMIT_MB, MODE_MODELS
+from ..config import MLX_CACHE_LIMIT_MB
 from .audio import SAMPLE_RATE, to_tensor
 
 CHUNK_SECONDS = 120.0   # 進度粒度與單次推理長度的折衷
@@ -131,14 +132,14 @@ def _to_traditional(segments: list[dict]) -> None:
 
 def transcribe(
     audio: np.ndarray,
-    mode: str,
+    model_path: Path,
     language: Optional[str],
     on_progress: Callable[[float], None] = lambda f: None,
 ) -> dict:
     """主轉錄函式。回傳 {"language", "segments": [{start,end,text,words}], "duration"}。
 
     audio: 16kHz 單聲道 float32 波形（audio.load_audio）
-    mode: cheetah/dolphin/whale（config.MODE_MODELS）
+    model_path: 本機模型目錄（models.ensure 回傳）；給路徑而非 repo 名，mlx_whisper 載入時才不會連網
     language: None=自動偵測（第一塊偵測後鎖定）；"zh"/"en"/... 指定語言
     on_progress: 每完成一塊回報 0.0–1.0（以語音秒數計，真實進度）
     """
@@ -147,14 +148,14 @@ def transcribe(
     import mlx_whisper
     from mlx_whisper.transcribe import ModelHolder
 
-    model = MODE_MODELS[mode]
+    model = str(model_path)
     total = len(audio) / SAMPLE_RATE
     if len(audio) == 0:
         return {"language": language or "unknown", "segments": [], "duration": total}
 
     mx.set_cache_limit(MLX_CACHE_LIMIT_MB << 20)
     if ModelHolder.model_path not in (None, model):
-        # ModelHolder 是先載新模型再丟舊的；先清掉，避免換模式時兩個模型同時常駐
+        # ModelHolder 是先載新模型再丟舊的；先清掉，避免換模型時兩個模型同時常駐
         ModelHolder.model = ModelHolder.model_path = None
         gc.collect()
         mx.clear_cache()

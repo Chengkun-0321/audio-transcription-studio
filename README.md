@@ -26,7 +26,8 @@ cp .env.example .env
 |---|---|
 | YouTube 下載 | 首頁貼網址，MP4/MP3，背景下載＋進度條 |
 | 上傳 | 拖放多檔（MP3/MP4/M4A/MOV/AAC/WAV/OGG/OPUS/MPEG/WMA/WMV） |
-| 轉錄模式 | 獵豹（whisper-small，快）／海豚（large-v3-turbo，平衡）／鯨魚（large-v3，準） |
+| Whisper 模型 | tiny／base／small／medium／large-v2／large-v3／large-v3-turbo（預設）任選，第一次使用自動下載 |
+| 模型管理 | 「模型」頁查看下載狀態與佔用空間，可預先下載、取消、刪除 |
 | 語言 | 自動偵測／繁中／English／其他 18 種；中文結果自動轉繁體（OpenCC s2twp） |
 | 說話者識別 | pyannote community-1，CPU 運算（預設關，長音檔慢） |
 | 音訊修復 | DeepFilterNet 官方執行檔（backend/bin/deep-filter） |
@@ -41,12 +42,12 @@ cp .env.example .env
 - `backend/`：FastAPI + Python 3.12（`.venv`）。任務用 BackgroundTasks，狀態寫回 JSON。
 - `frontend/`：Vite 7 + React 19 + Tailwind 4（Node 22，`.nvmrc`）。
 - `data/`：檔案系統即資料庫——`library/<資料夾>/<media-id>/`（source.* + meta.json + jobs/），`inbox/` 為未分類。備份 = 複製 data/。
-- `models/`：所有 AI 模型統一放在專案內（約 4.9GB，首次使用自動下載，之後離線可用，不進版控）。
+- `models/`：所有 AI 模型統一放在專案內（首次使用自動下載，之後離線可用，不進版控；Whisper 模型可在「模型」頁刪除）。
 - 根目錄 `.env`：前後端 Port 與 `HF_TOKEN`（pyannote gated model 用，不進版控）。
 
 ## 已知限制
 
 - Whisper 對長靜音的幻覺已用 silero-vad 切除靜音段緩解。
 - 說話者識別為 CPU-bound（pyannote 無 MLX 版），一小時音檔約 10–20 分鐘。
-- 鯨魚模式在 16GB 機型與其他大型程式並用時可能有記憶體壓力。
+- large-v2／large-v3 在 16GB 機型與其他大型程式並用時可能有記憶體壓力。
 - yt-dlp 與 YouTube ToS 有灰色地帶，僅供個人本機使用。

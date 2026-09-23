@@ -7,7 +7,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { api } from "../lib/api";
-import { jobStageLabel, MODE_INFO, type ModeKey } from "../lib/format";
+import { jobModel, jobStageLabel } from "../lib/format";
 import { exitFast, spring } from "../lib/motion";
 import { WaveformPulse } from "./sonar";
 import { Badge, Button, MetaLine, ProgressBar } from "./ui";
@@ -94,8 +94,8 @@ export function TaskDrawer() {
                         items={[
                           { label: "狀態", value: jobStageLabel(job) },
                           { label: "進度", value: `${job.progress}%`, mono: true },
-                          job.type === "transcribe" && job.mode
-                            ? { label: "模式", value: MODE_INFO[job.mode as ModeKey].name }
+                          job.type === "transcribe"
+                            ? { label: "模型", value: jobModel(job), mono: true }
                             : { label: "類型", value: `下載 ${job.format?.toUpperCase() ?? ""}` },
                           !!job.speed && { label: "速度", value: job.speed, mono: true },
                         ]}

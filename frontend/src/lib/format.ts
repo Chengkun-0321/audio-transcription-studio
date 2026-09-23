@@ -1,4 +1,5 @@
-/** 顯示格式化工具與 UI 常數（模式資訊、語言清單、階段標籤）。 */
+/** 顯示格式化工具與 UI 常數（語言清單、階段標籤、任務模型名）。 */
+import type { Job } from "./types";
 
 /** 秒數 → "3:05" / "1:02:03"（列表用，前面要搭配「時長」標籤）；未知時為 "—" */
 export function fmtDuration(seconds: number | null | undefined): string {
@@ -69,14 +70,25 @@ export function mediaTypeLabel(kind: "video" | "audio" | null, ext: string | nul
   return ext ? `${k} · ${ext.replace(/^\./, "").toUpperCase()}` : k;
 }
 
-/** 三檔轉錄模式的顯示資訊（實際模型對應在後端 config.MODE_MODELS）。 */
-export const MODE_INFO = {
-  cheetah: { name: "獵豹", tagline: "最快 · 快速預覽", model: "whisper-small" },
-  dolphin: { name: "海豚", tagline: "平衡 · 日常推薦", model: "large-v3-turbo" },
-  whale: { name: "鯨魚", tagline: "最準 · 重要內容", model: "large-v3" },
-} as const;
+/** 位元組 → "74 MB" / "1.6 GB"（十進位，與 Hugging Face 顯示一致） */
+export function fmtBytes(bytes: number): string {
+  if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
+  if (bytes >= 1e6) return `${Math.round(bytes / 1e6)} MB`;
+  if (bytes >= 1e3) return `${Math.round(bytes / 1e3)} KB`;
+  return `${bytes} B`;
+}
 
-export type ModeKey = keyof typeof MODE_INFO;
+/** 舊版任務只存轉錄模式，對應回模型名（同後端 config.LEGACY_MODES） */
+const LEGACY_MODES: Record<string, string> = {
+  cheetah: "small",
+  dolphin: "large-v3-turbo",
+  whale: "large-v3",
+};
+
+/** 轉錄任務使用的 Whisper 模型名（相容舊版的 mode 欄位） */
+export function jobModel(job: Pick<Job, "model" | "mode">): string {
+  return job.model ?? (job.mode && LEGACY_MODES[job.mode]) ?? "—";
+}
 
 /** 常用語言：直接顯示為按鈕；其他語言收在下拉。 */
 export const COMMON_LANGUAGES = [
@@ -115,6 +127,7 @@ export function langLabel(code: string | undefined): string {
 
 /** 任務階段 → 顯示文字。 */
 export const STAGE_LABEL: Record<string, string> = {
+  fetch_model: "下載模型中",
   denoise: "音訊修復中",
   transcribe: "轉錄中",
   diarize: "識別說話者",

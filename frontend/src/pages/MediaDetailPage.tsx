@@ -14,12 +14,11 @@ import {
   fmtDateTime,
   fmtDurationLong,
   fmtTimestamp,
+  jobModel,
   jobStageLabel,
   langLabel,
   mediaTypeLabel,
-  MODE_INFO,
   SOURCE_LABEL,
-  type ModeKey,
 } from "../lib/format";
 import type { Folder, Job, Media, Transcript } from "../lib/types";
 import { CheckDraw, WaveformPulse } from "../components/sonar";
@@ -40,7 +39,7 @@ import {
   Switch,
   type MenuEntry,
 } from "../components/ui";
-import { DEFAULT_SETTINGS, TranscribeOptions, type TranscribeSettings } from "../components/TranscribeOptions";
+import { defaultSettings, TranscribeOptions, type TranscribeSettings } from "../components/TranscribeOptions";
 
 // 說話者色走 token（index.css --spk-*），淺/深主題各有對比足夠的色值
 const SPEAKER_COLORS = ["text-sonar", "text-amber", "text-spk-3", "text-spk-4", "text-spk-5", "text-spk-6"];
@@ -89,7 +88,7 @@ export function MediaDetailPage() {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleInput, setTitleInput] = useState("");
   const [newJobOpen, setNewJobOpen] = useState(false);
-  const [settings, setSettings] = useState<TranscribeSettings>(DEFAULT_SETTINGS);
+  const [settings, setSettings] = useState<TranscribeSettings>(defaultSettings);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [menu, setMenu] = useState<{ kind: "more" | "export" | "keys"; anchor: HTMLElement } | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
@@ -134,10 +133,11 @@ export function MediaDetailPage() {
     localStorage.setItem("transcript-ts", v ? "on" : "off");
   };
 
+  // 剛建立的任務會立即被選取（此時還沒有結果）：任務完成時 jobsVersion 遞增，再抓一次
   useEffect(() => {
     if (!selectedJobId) return setTranscript(null);
     api.getSegments(selectedJobId).then(setTranscript).catch(() => setTranscript(null));
-  }, [selectedJobId]);
+  }, [selectedJobId, jobsVersion]);
 
   const activeJob = activeJobs.find((j) => j.media_id === id);
   const doneJobs = useMemo(
@@ -380,7 +380,7 @@ export function MediaDetailPage() {
       const job = await api.createJob({ media_id: media.id, ...settings });
       setNewJobOpen(false);
       refreshJobs();
-      toast(`已開始${MODE_INFO[settings.mode].name}模式轉錄`, "success");
+      toast(`已開始以 ${settings.model} 轉錄`, "success");
       setSelectedJobId(job.id);
     } catch (e) {
       toast((e as Error).message, "error");
@@ -682,9 +682,7 @@ export function MediaDetailPage() {
                   <WaveformPulse size="sm" />
                   <span className="truncate">
                     {jobStageLabel(activeJob)}
-                    {activeJob.type === "transcribe" && activeJob.mode
-                      ? `（${MODE_INFO[activeJob.mode as ModeKey].name}模式）`
-                      : ""}
+                    {activeJob.type === "transcribe" ? `（${jobModel(activeJob)}）` : ""}
                   </span>
                 </span>
                 <span className="flex shrink-0 items-center gap-3">
@@ -741,7 +739,7 @@ export function MediaDetailPage() {
                     >
                       {doneJobs.map((j) => (
                         <option key={j.id} value={j.id}>
-                          {fmtDateTime(j.created_at)} · {MODE_INFO[(j.mode ?? "dolphin") as ModeKey].name}
+                          {fmtDateTime(j.created_at)} · {jobModel(j)}
                           {j.diarization ? " · 說話者" : ""}
                         </option>
                       ))}
@@ -751,7 +749,7 @@ export function MediaDetailPage() {
                 <MetaLine
                   items={[
                     { label: "語言", value: langLabel(selectedJob.detected_language ?? selectedJob.language) },
-                    { label: "模式", value: MODE_INFO[(selectedJob.mode ?? "dolphin") as ModeKey].name },
+                    { label: "模型", value: jobModel(selectedJob), mono: true },
                     { label: "說話者識別", value: selectedJob.diarization ? "開啟" : "關閉" },
                     !!selectedJob.diarization &&
                       !!selectedJob.num_speakers && { label: "說話者人數", value: `${selectedJob.num_speakers} 人` },
@@ -903,7 +901,7 @@ export function MediaDetailPage() {
             )
           ) : doneJobs.length === 0 && !activeJob ? (
             <p className="px-5 py-10 text-center text-sm text-fg-muted">
-              尚未轉錄。按右上「開始轉錄」，選擇語言與模式。
+              尚未轉錄。按右上「開始轉錄」，選擇語言與模型。
             </p>
           ) : null}
         </div>
@@ -933,7 +931,7 @@ export function MediaDetailPage() {
                 <span className="text-fg/85">
                   {j.type === "download"
                     ? `下載 ${j.format?.toUpperCase() ?? ""}`
-                    : `轉錄 · ${MODE_INFO[(j.mode ?? "dolphin") as ModeKey].name}模式${j.diarization ? " · 說話者識別" : ""}${j.denoise ? " · 音訊修復" : ""}`}
+                    : `轉錄 · ${jobModel(j)}${j.diarization ? " · 說話者識別" : ""}${j.denoise ? " · 音訊修復" : ""}`}
                 </span>
                 {j.status === "done" ? (
                   <Badge tone="sonar">

@@ -9,7 +9,7 @@ export interface Job {
   /** 狀態機：queued → processing → done | error | cancelled */
   status: "queued" | "processing" | "done" | "error" | "cancelled";
   /** 進行中的階段（決定顯示文字），非進行中為 null */
-  stage: "denoise" | "transcribe" | "diarize" | "export" | "download" | null;
+  stage: "fetch_model" | "denoise" | "transcribe" | "diarize" | "export" | "download" | null;
   /** 真實進度 0–100（依階段權重合成，非動畫） */
   progress: number;
   /** 使用者已按終止、worker 尚未停止時為 true（顯示「終止中…」） */
@@ -18,7 +18,10 @@ export interface Job {
   created_at: string;
   completed_at: string | null;
   // -- 轉錄任務專屬 --
-  mode?: "cheetah" | "dolphin" | "whale";
+  /** Whisper 模型 key（WhisperModel.key）；顯示一律用 format.ts 的 jobModel() */
+  model?: string;
+  /** 舊版任務只有轉錄模式（cheetah/dolphin/whale），由 jobModel() 對應回模型 */
+  mode?: string;
   language?: string;
   diarization?: boolean;
   /** 指定的說話者人數；null = 自動判斷 */
@@ -78,6 +81,28 @@ export interface Segment {
   /** 說話者標籤（S1/S2...），僅開啟說話者識別時存在 */
   speaker?: string;
   words: Word[];
+}
+
+/** Whisper 模型與本機狀態（清單與順序由後端 config.WHISPER_MODELS 決定）。 */
+export interface WhisperModel {
+  /** 模型名稱，同時是建立任務時送出的值（如 "large-v3-turbo"） */
+  key: string;
+  /** Hugging Face repo */
+  repo: string;
+  /** 參數量（如 "809M"） */
+  params: string;
+  /** 首次使用需下載的大小（MB，約略值） */
+  download_mb: number;
+  note: string;
+  /** 未指定時的預設模型 */
+  default: boolean;
+  status: "downloaded" | "downloading" | "absent";
+  /** 下載進度 0–100；非下載中為 null */
+  progress: number | null;
+  /** 本機實際佔用（含下載到一半的檔案） */
+  size_bytes: number;
+  /** 有排隊中或執行中的轉錄任務用到它（此時不能刪除） */
+  in_use: boolean;
 }
 
 /** 完整轉錄結果（jobs/<id>.segments.json 的內容）。 */

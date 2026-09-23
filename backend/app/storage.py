@@ -282,7 +282,7 @@ def new_job_id() -> str:
 def create_job(media_dir: Path, job_type: str, **fields: Any) -> dict:
     """建立新任務並寫入 jobs/<id>.json。
 
-    job_type: "transcribe"（額外欄位 mode/language/diarization/denoise）
+    job_type: "transcribe"（額外欄位 model/language/diarization/denoise）
               或 "download"（額外欄位 url/format）。
     """
     job = {
@@ -290,7 +290,7 @@ def create_job(media_dir: Path, job_type: str, **fields: Any) -> dict:
         "type": job_type,  # transcribe | download
         "media_id": media_dir.name,
         "status": "queued",  # queued -> processing -> done | error
-        "stage": None,       # denoise | transcribe | diarize | export | download
+        "stage": None,       # fetch_model | denoise | transcribe | diarize | export | download
         "progress": 0,
         "error_message": None,
         "created_at": now_iso(),

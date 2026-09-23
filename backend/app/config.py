@@ -42,16 +42,34 @@ MODELS_DIR = PROJECT_ROOT / "models"
 # 只有系統未設定 HF_HOME 時才使用專案 models/；若已設定，模型會存到外部路徑。
 os.environ["HF_HOME"] = str(MODELS_DIR)
 # 無論系統設定為何，都強制使用此專案的 models/。
+# 關掉 Xet 協定、改走一般 HTTP 下載：Xet 的進度只在檔案快完成時才回報，
+# 進度 callback 丟出的例外也會被吞掉（取消不了）。HTTP 能逐塊回報進度、可中止、可續傳。
+os.environ["HF_HUB_DISABLE_XET"] = "1"
 
-# 轉錄模式 -> MLX 模型（規格 §3.2）
-# 注意：small 與 large-v3 在 HF 上的實際 repo 名稱帶 -mlx 後綴，turbo 沒有
-MODE_MODELS = {
-    "cheetah": "mlx-community/whisper-small-mlx",       # 獵豹：最快，快速預覽
-    "dolphin": "mlx-community/whisper-large-v3-turbo",  # 海豚：平衡，日常推薦
-    "whale": "mlx-community/whisper-large-v3-mlx",      # 鯨魚：最準，重要內容
+# 可選的 Whisper 模型（dict 順序 = 前端顯示順序）；前端清單一律由 GET /api/models 取得。
+# 注意：HF 實際 repo 名只有 large-v3-turbo 沒有 -mlx 後綴，其餘都有（寫錯會 404）。
+# download_mb 是 HF 上的檔案大小，僅供顯示「首次使用會下載多少」。
+WHISPER_MODELS: dict[str, dict] = {
+    "tiny": {"repo": "mlx-community/whisper-tiny-mlx", "params": "39M",
+             "download_mb": 74, "note": "最快，準確度最低，適合試跑"},
+    "base": {"repo": "mlx-community/whisper-base-mlx", "params": "74M",
+             "download_mb": 144, "note": "很快，清楚的單人語音可用"},
+    "small": {"repo": "mlx-community/whisper-small-mlx", "params": "244M",
+              "download_mb": 481, "note": "快，適合快速預覽"},
+    "medium": {"repo": "mlx-community/whisper-medium-mlx", "params": "769M",
+               "download_mb": 1525, "note": "較準，速度中等"},
+    "large-v2": {"repo": "mlx-community/whisper-large-v2-mlx", "params": "1.55B",
+                 "download_mb": 3083, "note": "舊版最大模型，部分內容幻覺較少"},
+    "large-v3": {"repo": "mlx-community/whisper-large-v3-mlx", "params": "1.55B",
+                 "download_mb": 3084, "note": "最準，最慢，重要內容用"},
+    "large-v3-turbo": {"repo": "mlx-community/whisper-large-v3-turbo", "params": "809M",
+                       "download_mb": 1614, "note": "接近 large-v3 的準確度、快很多，日常推薦"},
 }
+DEFAULT_MODEL = "large-v3-turbo"
+# 舊版 job 只存轉錄模式（mode），顯示/匯出時對應回模型
+LEGACY_MODES = {"cheetah": "small", "dolphin": "large-v3-turbo", "whale": "large-v3"}
 
-# MLX 會把用過的 Metal buffer 留作快取重用，預設無上限（實測鯨魚模式 6 分鐘音訊 50 秒內
+# MLX 會把用過的 Metal buffer 留作快取重用，預設無上限（實測 large-v3 6 分鐘音訊 50 秒內
 # 衝破 11GB）。256MB 與 1GB 實測速度無差、峰值少約 0.7GB
 MLX_CACHE_LIMIT_MB = 256
 

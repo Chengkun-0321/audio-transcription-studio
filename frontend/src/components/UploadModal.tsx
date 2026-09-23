@@ -8,7 +8,7 @@ import { api, uploadFile } from "../lib/api";
 import type { Folder } from "../lib/types";
 import { SonarPing } from "./sonar";
 import { Button, IconButton, Modal, ProgressBar, Select, Switch } from "./ui";
-import { DEFAULT_SETTINGS, TranscribeOptions, type TranscribeSettings } from "./TranscribeOptions";
+import { defaultSettings, TranscribeOptions, type TranscribeSettings } from "./TranscribeOptions";
 
 const ACCEPT = ".mp3,.mp4,.m4a,.mov,.aac,.wav,.ogg,.opus,.mpeg,.wma,.wmv";
 
@@ -34,7 +34,7 @@ export function UploadModal({
 }) {
   const { toast, refreshJobs } = useApp();
   const [items, setItems] = useState<FileItem[]>([]);
-  const [settings, setSettings] = useState<TranscribeSettings>(DEFAULT_SETTINGS);
+  const [settings, setSettings] = useState<TranscribeSettings>(defaultSettings);
   const [folder, setFolder] = useState<string | null>(initialFolder);
   const [autoTranscribe, setAutoTranscribe] = useState(true);
   const [dragging, setDragging] = useState(false);
