@@ -1,43 +1,120 @@
-/* 全域樣式與「深海聲納」設計 token（規格 §6）。
+/* 全域樣式與「深海聲納 · 液態玻璃」設計 token。
  * 顏色一律走 CSS 變數 → @theme inline 轉成 Tailwind utility（bg-surface、
- * text-sonar…），元件內不出現硬編碼色票，切主題只需換 :root/.dark 的變數值。 */
+ * text-sonar…），元件內不出現硬編碼色票，切主題只需換 :root/.dark 的變數值。
+ *
+ * 材質分層（依 Apple Liquid Glass 原則）：
+ *   ambient  —— 最底層的深海光暈背景，玻璃要有東西可透才有質感
+ *   surface  —— 內容層（卡片、列表），半透明但不做 backdrop-filter，避免長列表卡頓
+ *   glass-*  —— 導覽與控制層（header、彈窗、抽屜、toast），真正的模糊＋折射高光 */
 @import "tailwindcss";
 
-/* 手動雙主題（規格 §6）：深海 = dark、水面 = light，不跟隨系統，由 useTheme 切 .dark class */
+/* 手動雙主題：深海 = dark、水面 = light，不跟隨系統，由 useTheme 切 .dark class */
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
+  color-scheme: light;
   /* 水面（Light） */
-  --ink: #f4f7f9;
-  --ink-deep: #e9eef2;
-  --surface: #ffffff;
-  --surface-hover: #f0f4f6;
-  --line: #d8e1e6;
-  --fg: #141a21;
-  --fg-muted: #5b6b78;
-  --sonar: #0f9c8f;
-  --sonar-soft: rgba(15, 156, 143, 0.12);
-  --amber: #c2760a;
-  --amber-soft: rgba(194, 118, 10, 0.12);
-  --danger: #b3362c;
-  --danger-soft: rgba(179, 54, 44, 0.1);
+  --ink: #eef3f6;
+  --ink-deep: #e2eaef;
+  --surface: rgba(255, 255, 255, 0.62);
+  --surface-hover: rgba(15, 40, 60, 0.06);
+  --line: rgba(15, 40, 60, 0.1);
+  --fg: #0f1720;
+  --fg-muted: #52667a;
+  --sonar: #0a7c72;
+  --sonar-soft: rgba(10, 124, 114, 0.12);
+  --amber: #b86e06;
+  --amber-soft: rgba(184, 110, 6, 0.12);
+  --danger: #c0392b;
+  --danger-soft: rgba(192, 57, 43, 0.1);
+
+  /* 說話者標籤色（第 1、2 位用 sonar / amber） */
+  --spk-3: #2f6db5;
+  --spk-4: #8a4fc0;
+  --spk-5: #b8457e;
+  --spk-6: #4a8527;
+
+  /* 玻璃材質 */
+  --glass-bg: rgba(255, 255, 255, 0.5);
+  --glass-bg-strong: rgba(250, 252, 253, 0.78);
+  --glass-solid: #f7fafb;
+  --glass-sheen: rgba(255, 255, 255, 0.55);
+  --glass-rim: rgba(255, 255, 255, 0.95);
+  --glass-rim-weak: rgba(255, 255, 255, 0.2);
+  --glass-edge: rgba(15, 35, 55, 0.07);
+  --glass-inner: inset 0 1px 0 rgba(255, 255, 255, 0.85), inset 0 -1px 1px rgba(255, 255, 255, 0.3);
+  --glass-shadow: 0 12px 32px -12px rgba(15, 35, 55, 0.22), 0 2px 6px -2px rgba(15, 35, 55, 0.08);
+
+  /* 選中「水珠」（導覽、分段控制的滑動指示器） */
+  --bead-bg: rgba(255, 255, 255, 0.92);
+  --bead-shadow: 0 1px 2px rgba(15, 35, 55, 0.1), 0 6px 16px -6px rgba(15, 35, 55, 0.2),
+    inset 0 1px 0 #fff;
+
+  /* 輸入框 */
+  --field-bg: rgba(255, 255, 255, 0.55);
+  --field-inset: inset 0 1px 2px rgba(15, 35, 55, 0.08);
+
+  /* 深海光暈 */
+  --orb-a: rgba(15, 156, 143, 0.3);
+  --orb-b: rgba(80, 150, 255, 0.3);
+  --orb-c: rgba(150, 120, 255, 0.22);
+  --orb-d: rgba(255, 170, 110, 0.22);
+  --grain-opacity: 0.05;
+  --scrim: rgba(20, 35, 50, 0.22);
+
+  /* 動態曲線：fluid = Apple sheet 減速曲線；spring = 帶 ~5% 回彈的阻尼彈簧 */
+  --ease-fluid: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-spring: linear(
+    0, 0.034 2.1%, 0.13 4.4%, 0.284 7%, 0.5 10.3%, 0.699 13.9%, 0.852 17.6%, 0.957 21.4%,
+    1.02 25.4%, 1.047 29.4%, 1.052 33.5%, 1.043 38.4%, 1.012 49.5%, 0.998 61%, 0.997 72.5%, 1
+  );
 }
 
 .dark {
+  color-scheme: dark;
   /* 深海（Dark） */
-  --ink: #0a0e14;
-  --ink-deep: #070a0f;
-  --surface: #121924;
-  --surface-hover: #182230;
-  --line: #1f2a36;
-  --fg: #e4ecf1;
-  --fg-muted: #8fa3b0;
+  --ink: #04070c;
+  --ink-deep: #020409;
+  --surface: rgba(22, 31, 44, 0.52);
+  --surface-hover: rgba(255, 255, 255, 0.06);
+  --line: rgba(255, 255, 255, 0.09);
+  --fg: #e8eff4;
+  --fg-muted: #93a6b4;
   --sonar: #3ed9c4;
-  --sonar-soft: rgba(62, 217, 196, 0.12);
+  --sonar-soft: rgba(62, 217, 196, 0.13);
   --amber: #f2a65a;
   --amber-soft: rgba(242, 166, 90, 0.14);
   --danger: #f27e6f;
   --danger-soft: rgba(242, 126, 111, 0.12);
+
+  --spk-3: #7fb2f0;
+  --spk-4: #c792ea;
+  --spk-5: #e08fbe;
+  --spk-6: #9ccc65;
+
+  --glass-bg: rgba(30, 42, 58, 0.38);
+  --glass-bg-strong: rgba(16, 24, 35, 0.74);
+  --glass-solid: #111925;
+  --glass-sheen: rgba(255, 255, 255, 0.07);
+  --glass-rim: rgba(255, 255, 255, 0.34);
+  --glass-rim-weak: rgba(255, 255, 255, 0.03);
+  --glass-edge: rgba(0, 0, 0, 0.45);
+  --glass-inner: inset 0 1px 0 rgba(255, 255, 255, 0.1), inset 0 -1px 1px rgba(255, 255, 255, 0.03);
+  --glass-shadow: 0 18px 44px -14px rgba(0, 0, 0, 0.7), 0 2px 8px -2px rgba(0, 0, 0, 0.45);
+
+  --bead-bg: rgba(255, 255, 255, 0.13);
+  --bead-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 6px 18px -6px rgba(0, 0, 0, 0.7);
+
+  --field-bg: rgba(0, 0, 0, 0.28);
+  --field-inset: inset 0 1px 3px rgba(0, 0, 0, 0.45);
+
+  --orb-a: rgba(62, 217, 196, 0.22);
+  --orb-b: rgba(40, 95, 210, 0.3);
+  --orb-c: rgba(115, 80, 225, 0.22);
+  --orb-d: rgba(242, 166, 90, 0.1);
+  --grain-opacity: 0.07;
+  --scrim: rgba(0, 0, 0, 0.5);
 }
 
 @theme inline {
@@ -54,10 +131,15 @@
   --color-amber-soft: var(--amber-soft);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
+  --color-spk-3: var(--spk-3);
+  --color-spk-4: var(--spk-4);
+  --color-spk-5: var(--spk-5);
+  --color-spk-6: var(--spk-6);
 
-  --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
-  --font-body: "Inter", system-ui, -apple-system, "PingFang TC", sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  /* Apple 裝置走系統 SF Pro / 蘋方；其他平台退回 Inter */
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "PingFang TC", system-ui, sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "PingFang TC", system-ui, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, "JetBrains Mono", SFMono-Regular, monospace;
 }
 
 html,
@@ -69,8 +151,13 @@ body,
 body {
   font-family: var(--font-body);
   color: var(--fg);
-  /* 主背景由上往下微幅加深（深海感）；淺色主題同樣柔和 */
-  background: linear-gradient(180deg, var(--ink) 0%, var(--ink-deep) 100%) fixed;
+  background: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.font-display {
+  letter-spacing: -0.015em;
 }
 
 ::selection {
@@ -85,4 +172,262 @@ body {
 
 input[type="checkbox"] {
   accent-color: var(--sonar);
+}
+
+/* 放 base layer：讓 .field 等 utility 能覆寫成自己的聚焦光暈 */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--sonar);
+    outline-offset: 2px;
+  }
+}
+
+/* ---------- 深海光暈背景（Layout 的 <Ambient />） ---------- */
+
+.ambient {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  background: radial-gradient(120% 80% at 50% 0%, var(--ink) 0%, var(--ink-deep) 100%);
+}
+
+.ambient > span {
+  position: absolute;
+  width: 70vmax;
+  height: 70vmax;
+  border-radius: 9999px;
+  will-change: transform;
+  animation: orb-drift 42s ease-in-out infinite alternate;
+}
+
+.ambient > span:nth-child(1) {
+  top: -32vmax;
+  left: -18vmax;
+  background: radial-gradient(circle, var(--orb-a) 0%, transparent 62%);
+}
+.ambient > span:nth-child(2) {
+  top: -24vmax;
+  right: -26vmax;
+  background: radial-gradient(circle, var(--orb-b) 0%, transparent 62%);
+  animation-duration: 54s;
+  animation-direction: alternate-reverse;
+}
+.ambient > span:nth-child(3) {
+  bottom: -40vmax;
+  left: 10vmax;
+  background: radial-gradient(circle, var(--orb-c) 0%, transparent 62%);
+  animation-duration: 64s;
+}
+.ambient > span:nth-child(4) {
+  bottom: -38vmax;
+  right: -30vmax;
+  background: radial-gradient(circle, var(--orb-d) 0%, transparent 62%);
+  animation-duration: 48s;
+  animation-direction: alternate-reverse;
+}
+
+/* 顆粒噪點：打散漸層色階斷層，也讓玻璃更有實體感 */
+.ambient::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: var(--grain-opacity);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+@keyframes orb-drift {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(6vmax, 4vmax, 0) scale(1.08);
+  }
+  100% {
+    transform: translate3d(-4vmax, 7vmax, 0) scale(0.96);
+  }
+}
+
+/* ---------- 玻璃材質 ---------- */
+
+/* 共用：邊緣折射高光。::before 以 mask 只留 1px 邊框，左上亮、右下弱，模擬光源。
+ * 需要元素本身是定位元素（fixed/absolute/sticky 或自行加 relative）。 */
+@utility glass-rim {
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    pointer-events: none;
+    background: linear-gradient(
+      155deg,
+      var(--glass-rim) 0%,
+      var(--glass-rim-weak) 32%,
+      transparent 50%,
+      var(--glass-rim-weak) 74%,
+      var(--glass-rim) 100%
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    mask-composite: exclude;
+  }
+}
+
+/* 標準玻璃：導覽膠囊、按鈕群組 */
+@utility glass {
+  @apply glass-rim;
+  background: linear-gradient(180deg, var(--glass-sheen), transparent 55%), var(--glass-bg);
+  -webkit-backdrop-filter: blur(18px) saturate(190%);
+  backdrop-filter: blur(18px) saturate(190%);
+  box-shadow: var(--glass-inner), 0 0 0 0.5px var(--glass-edge), var(--glass-shadow);
+
+  @media (prefers-reduced-transparency: reduce) {
+    background: var(--glass-solid);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* 厚玻璃：彈窗、抽屜、toast——疊在內容上，需要更高不透明度保可讀性 */
+@utility glass-strong {
+  @apply glass-rim;
+  background: linear-gradient(180deg, var(--glass-sheen), transparent 40%), var(--glass-bg-strong);
+  -webkit-backdrop-filter: blur(32px) saturate(180%);
+  backdrop-filter: blur(32px) saturate(180%);
+  box-shadow: var(--glass-inner), 0 0 0 0.5px var(--glass-edge), var(--glass-shadow);
+
+  @media (prefers-reduced-transparency: reduce) {
+    background: var(--glass-solid);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* 內容卡片：不做 backdrop-filter（背景本身已是柔焦光暈，半透明即有霧面感） */
+@utility glass-card {
+  @apply glass-rim;
+  background: linear-gradient(180deg, var(--glass-sheen), transparent 30%), var(--surface);
+  box-shadow: var(--glass-inner), 0 0 0 0.5px var(--glass-edge), var(--glass-shadow);
+}
+
+/* 滑動選中指示器 */
+@utility bead {
+  background: var(--bead-bg);
+  box-shadow: var(--bead-shadow);
+}
+
+/* 凹陷輸入框 */
+@utility field {
+  background: var(--field-bg);
+  box-shadow: var(--field-inset), 0 0 0 1px var(--line);
+  transition: box-shadow 0.25s var(--ease-fluid);
+  outline: none;
+
+  &:focus,
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--field-inset), 0 0 0 1px var(--sonar), 0 0 0 4px var(--sonar-soft);
+  }
+}
+
+/* 按壓回饋：縮放 + 彈簧回彈 */
+@utility press {
+  transition:
+    transform 0.45s var(--ease-spring),
+    opacity 0.2s,
+    background-color 0.2s,
+    color 0.2s,
+    box-shadow 0.25s;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+
+  &:active:not(:disabled) {
+    transform: scale(0.96);
+    transition-duration: 0.12s;
+  }
+}
+
+/* 主要行動按鈕：凝膠質感（頂部高光 + 同色光暈） */
+@utility btn-gel {
+  color: var(--ink);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0) 55%),
+    var(--sonar);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12),
+    0 8px 22px -8px var(--sonar);
+
+  &:hover:not(:disabled) {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.5),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.12),
+      0 10px 30px -8px var(--sonar);
+  }
+}
+
+/* 進度條流光（處理中） */
+@utility shimmer {
+  background-image: linear-gradient(
+    100deg,
+    transparent 20%,
+    rgba(255, 255, 255, 0.45) 50%,
+    transparent 80%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
+}
+
+/* 列表項目進場：上浮淡入，--i 為索引，錯開 30ms（最多 10 個，後面同時進場）。
+ * 用 CSS 而非 motion.li：framer-motion 會接管 onDragStart，破壞原生 HTML5 拖曳歸檔。 */
+@utility rise-in {
+  animation: rise-in 0.5s var(--ease-fluid) both;
+  animation-delay: calc(min(var(--i, 0), 10) * 30ms);
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* header 下緣「捲動邊緣」：漸層遮罩的漸進模糊，內容捲到頂部時柔和淡出 */
+@utility scroll-edge {
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  background: linear-gradient(180deg, var(--ink) 0%, transparent 100%);
+  -webkit-mask-image: linear-gradient(180deg, #000 45%, transparent);
+  mask-image: linear-gradient(180deg, #000 45%, transparent);
+}
+
+/* 主題切換：以 View Transitions 做圓形擴散，關掉預設交叉淡入 */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ambient > span,
+  .shimmer,
+  .rise-in {
+    animation: none;
+  }
 }

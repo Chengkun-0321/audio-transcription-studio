@@ -1,14 +1,17 @@
 /**
- * 轉錄設定表單：語言（常用按鈕＋其他下拉）、三檔模式卡片、
- * 進階摺疊區（說話者識別／音訊修復）。上傳彈窗與媒體詳細頁共用。
+ * 轉錄設定表單：語言（常用膠囊＋其他下拉）、三檔模式卡片（選中框彈簧滑動）、
+ * 進階摺疊區（說話者識別／音訊修復，iOS 設定列樣式）。上傳彈窗與媒體詳細頁共用。
  */
-import { useState } from "react";
+import { motion } from "framer-motion";
+import { useId, useState } from "react";
 import {
   COMMON_LANGUAGES,
   MODE_INFO,
   OTHER_LANGUAGES,
   type ModeKey,
 } from "../lib/format";
+import { springBead } from "../lib/motion";
+import { Select, Switch } from "./ui";
 
 export interface TranscribeSettings {
   mode: ModeKey;
@@ -31,6 +34,13 @@ const MODE_GLYPHS: Record<ModeKey, string> = {
   whale: "M2 7h20M2 12h20M2 17h14",
 };
 
+const chip = (active: boolean) =>
+  `press h-8 cursor-pointer rounded-full px-3.5 text-sm transition-colors ${
+    active
+      ? "bg-sonar-soft font-medium text-sonar shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--sonar)_45%,transparent)]"
+      : "bg-fg/[0.05] text-fg-muted hover:bg-fg/[0.08] hover:text-fg"
+  }`;
+
 export function TranscribeOptions({
   value,
   onChange,
@@ -38,6 +48,7 @@ export function TranscribeOptions({
   value: TranscribeSettings;
   onChange: (v: TranscribeSettings) => void;
 }) {
+  const modeBeadId = useId();
   const [showOthers, setShowOthers] = useState(
     OTHER_LANGUAGES.some((l) => l.code === value.language),
   );
@@ -48,34 +59,27 @@ export function TranscribeOptions({
       {/* 語言 */}
       <div>
         <p className="mb-2 text-xs font-medium tracking-wide text-fg-muted">語音語言（原生轉錄，非翻譯）</p>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {COMMON_LANGUAGES.map((l) => (
             <button
               key={l.code}
               type="button"
               onClick={() => onChange({ ...value, language: l.code })}
-              className={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${
-                value.language === l.code
-                  ? "border-sonar bg-sonar-soft font-medium text-sonar"
-                  : "border-line text-fg-muted hover:bg-surface-hover"
-              }`}
+              className={chip(value.language === l.code)}
             >
               {l.label}
             </button>
           ))}
           {!showOthers ? (
-            <button
-              type="button"
-              onClick={() => setShowOthers(true)}
-              className="rounded-lg border border-dashed border-line px-3 py-1.5 text-sm text-fg-muted hover:bg-surface-hover"
-            >
+            <button type="button" onClick={() => setShowOthers(true)} className={chip(false)}>
               其他…
             </button>
           ) : (
-            <select
+            <Select
+              size="sm"
+              aria-label="其他語言"
               value={OTHER_LANGUAGES.some((l) => l.code === value.language) ? value.language : ""}
               onChange={(e) => e.target.value && onChange({ ...value, language: e.target.value })}
-              className="rounded-lg border border-line bg-surface px-2 py-1.5 text-sm text-fg outline-none focus:border-sonar"
             >
               <option value="" disabled>
                 其他語言…
@@ -85,7 +89,7 @@ export function TranscribeOptions({
                   {l.label}
                 </option>
               ))}
-            </select>
+            </Select>
           )}
         </div>
       </div>
@@ -93,30 +97,48 @@ export function TranscribeOptions({
       {/* 三檔模式 */}
       <div>
         <p className="mb-2 text-xs font-medium tracking-wide text-fg-muted">轉錄模式</p>
-        <div className="grid grid-cols-3 gap-2">
-          {(Object.keys(MODE_INFO) as ModeKey[]).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => onChange({ ...value, mode: m })}
-              className={`flex flex-col items-start gap-1 rounded-xl border p-3 text-left transition-colors ${
-                value.mode === m
-                  ? "border-sonar bg-sonar-soft"
-                  : "border-line hover:bg-surface-hover"
-              }`}
-            >
-              <span className="flex w-full items-center justify-between">
-                <span className={`font-display text-sm font-semibold ${value.mode === m ? "text-sonar" : ""}`}>
-                  {MODE_INFO[m].name}
+        <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="轉錄模式">
+          {(Object.keys(MODE_INFO) as ModeKey[]).map((m) => {
+            const active = value.mode === m;
+            return (
+              <button
+                key={m}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => onChange({ ...value, mode: m })}
+                className={`press relative flex cursor-pointer flex-col items-start gap-1 rounded-2xl p-3 text-left transition-colors ${
+                  active ? "" : "bg-fg/[0.04] hover:bg-fg/[0.07]"
+                }`}
+              >
+                {active && (
+                  <motion.span
+                    layoutId={`mode-${modeBeadId}`}
+                    className="absolute inset-0 rounded-2xl bg-sonar-soft shadow-[inset_0_0_0_1.5px_var(--sonar),0_8px_24px_-12px_var(--sonar)]"
+                    transition={springBead}
+                  />
+                )}
+                <span className="relative flex w-full items-center justify-between">
+                  <span className={`font-display text-sm font-semibold ${active ? "text-sonar" : ""}`}>
+                    {MODE_INFO[m].name}
+                  </span>
+                  <svg
+                    viewBox="0 0 24 24"
+                    className={`h-4 w-4 ${active ? "text-sonar" : "text-fg-muted"}`}
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    aria-hidden
+                  >
+                    <path d={MODE_GLYPHS[m]} />
+                  </svg>
                 </span>
-                <svg viewBox="0 0 24 24" className={`h-4 w-4 ${value.mode === m ? "text-sonar" : "text-fg-muted"}`} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
-                  <path d={MODE_GLYPHS[m]} />
-                </svg>
-              </span>
-              <span className="text-xs leading-snug text-fg-muted">{MODE_INFO[m].tagline}</span>
-              <span className="font-mono text-[10px] text-fg-muted/70">{MODE_INFO[m].model}</span>
-            </button>
-          ))}
+                <span className="relative text-xs leading-snug text-fg-muted">{MODE_INFO[m].tagline}</span>
+                <span className="relative font-mono text-[10px] text-fg-muted/70">{MODE_INFO[m].model}</span>
+              </button>
+            );
+          })}
         </div>
         {value.mode === "whale" && (
           <p className="mt-2 text-xs leading-relaxed text-fg-muted">
@@ -130,52 +152,49 @@ export function TranscribeOptions({
         <button
           type="button"
           onClick={() => setShowAdvanced((s) => !s)}
-          className="flex items-center gap-1.5 text-xs font-medium tracking-wide text-fg-muted hover:text-fg"
+          aria-expanded={showAdvanced}
+          className="flex cursor-pointer items-center gap-1.5 text-xs font-medium tracking-wide text-fg-muted hover:text-fg"
         >
           <svg
             viewBox="0 0 24 24"
-            className={`h-3 w-3 transition-transform ${showAdvanced ? "rotate-90" : ""}`}
+            className={`h-3 w-3 transition-transform duration-300 ease-[var(--ease-spring)] ${showAdvanced ? "rotate-90" : ""}`}
             fill="none"
             stroke="currentColor"
             strokeWidth={2.5}
             strokeLinecap="round"
+            aria-hidden
           >
             <path d="M9 5l7 7-7 7" />
           </svg>
           進階設定
         </button>
         {showAdvanced && (
-          <div className="mt-3 flex flex-col gap-3 rounded-xl border border-line p-4">
-            <label className="flex items-start gap-3">
-              <input
-                type="checkbox"
-                checked={value.diarization}
-                onChange={(e) => onChange({ ...value, diarization: e.target.checked })}
-                className="mt-0.5"
-              />
-              <span>
+          <motion.div
+            className="mt-3 divide-y divide-line overflow-hidden rounded-2xl bg-fg/[0.04]"
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
+          >
+            <label className="flex cursor-pointer items-center gap-4 px-4 py-3">
+              <span className="min-w-0 flex-1">
                 <span className="block text-sm">說話者識別</span>
                 <span className="mt-0.5 block text-xs leading-relaxed text-fg-muted">
                   標記每段話由誰說。此功能在本機以 CPU 運算，一小時音檔約需 10–20
                   分鐘，視發言人數與音檔品質而定。
                 </span>
               </span>
+              <Switch checked={value.diarization} onChange={(v) => onChange({ ...value, diarization: v })} />
             </label>
-            <label className="flex items-start gap-3">
-              <input
-                type="checkbox"
-                checked={value.denoise}
-                onChange={(e) => onChange({ ...value, denoise: e.target.checked })}
-                className="mt-0.5"
-              />
-              <span>
+            <label className="flex cursor-pointer items-center gap-4 px-4 py-3">
+              <span className="min-w-0 flex-1">
                 <span className="block text-sm">音訊修復（AI 去噪＋語音增強）</span>
                 <span className="mt-0.5 block text-xs leading-relaxed text-fg-muted">
                   適合背景噪音明顯的錄音；乾淨的音檔不需要開啟。
                 </span>
               </span>
+              <Switch checked={value.denoise} onChange={(v) => onChange({ ...value, denoise: v })} />
             </label>
-          </div>
+          </motion.div>
         )}
       </div>
     </div>

@@ -4,6 +4,7 @@
  * 時間戳顯示開關（同步影響匯出）、TXT/SRT/DOCX 匯出、移至資料夾、
  * 標題點擊改名、重新轉錄、進行中任務進度與終止、任務歷史。
  */
+import { motion } from "framer-motion";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../context/AppContext";
@@ -11,17 +12,14 @@ import { api } from "../lib/api";
 import { fmtDate, fmtDuration, fmtTimestamp, jobStageLabel, langLabel, MODE_INFO, type ModeKey } from "../lib/format";
 import type { Folder, Job, Media, Transcript } from "../lib/types";
 import { CheckDraw, WaveformPulse } from "../components/sonar";
-import { ConfirmDialog, ProgressBar } from "../components/ui";
+import { Button, ConfirmDialog, IconButton, ProgressBar, Segmented, Select, Switch } from "../components/ui";
 import { DEFAULT_SETTINGS, TranscribeOptions, type TranscribeSettings } from "../components/TranscribeOptions";
 
-const SPEAKER_COLORS = [
-  "text-sonar",
-  "text-amber",
-  "text-[#7FB2F0]",
-  "text-[#C792EA]",
-  "text-[#E08FBE]",
-  "text-[#9CCC65]",
-];
+// 說話者色走 token（index.css --spk-*），淺/深主題各有對比足夠的色值
+const SPEAKER_COLORS = ["text-sonar", "text-amber", "text-spk-3", "text-spk-4", "text-spk-5", "text-spk-6"];
+
+// 快捷鍵 , / . 可調到 0.5–2 之間任意 0.25 倍數；不在此列時分段控制不顯示選中，旁邊另外標示目前倍速
+const PLAYBACK_RATES: string[] = ["0.75", "1", "1.25", "1.5", "2"];
 
 export function MediaDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -156,6 +154,20 @@ export function MediaDetailPage() {
       window.scrollBy({ top: finalTop - upperBound, behavior: "smooth" });
     }
   }, [activeSegIdx]);
+
+  /* <1100px 單欄：播放器黏住 header 時才顯示毛玻璃底，未黏住時與頁面背景融為一體 */
+  const stickyRef = useRef<HTMLDivElement>(null);
+  const [playerStuck, setPlayerStuck] = useState(false);
+  useEffect(() => {
+    const onScroll = () => {
+      const el = stickyRef.current;
+      // top-14 = 56px；≥1100px 時 sticky 在 5.5rem，永遠不會 <= 57，自然不觸發
+      setPlayerStuck(!!el && window.scrollY > 0 && el.getBoundingClientRect().top <= 57);
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [media?.media_kind]);
 
   const seekTo = (t: number) => {
     followRef.current = true;
@@ -381,10 +393,16 @@ export function MediaDetailPage() {
         >
           {/* 標題列 */}
           <div>
-            <Link to="/library" className="text-sm text-fg-muted transition-colors hover:text-sonar">
-              ← 媒體庫
+            <Link
+              to="/library"
+              className="press glass relative inline-flex h-8 items-center gap-1 rounded-full pl-2 pr-3.5 text-sm text-fg-muted hover:text-fg"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden>
+                <path d="M15 5l-7 7 7 7" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              媒體庫
             </Link>
-            <div className="mt-2 flex items-start justify-between gap-4">
+            <div className="mt-4 flex items-start justify-between gap-4">
               {editingTitle ? (
                 <input
                   autoFocus
@@ -395,11 +413,12 @@ export function MediaDetailPage() {
                     if (e.key === "Enter") saveTitle();
                     if (e.key === "Escape") setEditingTitle(false);
                   }}
-                  className="w-full rounded-lg border border-sonar bg-surface px-3 py-1.5 font-display text-2xl font-bold outline-none"
+                  aria-label="新標題"
+                  className="field w-full rounded-2xl px-3.5 py-1.5 font-display text-2xl font-semibold md:text-3xl"
                 />
               ) : (
                 <h1
-                  className="cursor-text font-display text-2xl font-bold leading-tight hover:opacity-80"
+                  className="cursor-text font-display text-2xl font-semibold leading-tight tracking-tight transition-opacity hover:opacity-80 md:text-3xl"
                   title="點擊更名"
                   onClick={() => {
                     setTitleInput(media.title);
@@ -409,24 +428,21 @@ export function MediaDetailPage() {
                   {media.title}
                 </h1>
               )}
-              <button
-                onClick={() => setConfirmDelete(true)}
-                className="shrink-0 rounded-lg border border-line px-3 py-1.5 text-sm text-fg-muted transition-colors hover:border-danger/50 hover:text-danger"
-              >
+              <Button variant="glass-danger" size="sm" onClick={() => setConfirmDelete(true)} className="mt-0.5">
                 刪除
-              </button>
+              </Button>
             </div>
-            <p className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-fg-muted">
-              <span className="font-mono">{fmtDuration(media.duration_seconds)}</span>
-              <span>·</span>
+            <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs text-fg-muted">
+              <span className="font-mono tabular-nums">{fmtDuration(media.duration_seconds)}</span>
+              <span aria-hidden>·</span>
               <span className="font-mono">{fmtDate(media.created_at)}</span>
-              <span>·</span>
+              <span aria-hidden>·</span>
               <label className="flex items-center gap-1.5">
                 <span>資料夾</span>
-                <select
+                <Select
+                  size="sm"
                   value={media.folder ?? ""}
                   onChange={(e) => moveToFolder(e.target.value || null)}
-                  className="rounded-md border border-line bg-surface px-1.5 py-0.5 text-xs outline-none focus:border-sonar"
                   title="移至資料夾"
                 >
                   <option value="">未分類</option>
@@ -435,65 +451,74 @@ export function MediaDetailPage() {
                       {f.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               {media.source_url && (
                 <>
-                  <span>·</span>
+                  <span aria-hidden>·</span>
                   <a href={media.source_url} target="_blank" rel="noreferrer" className="text-sonar hover:underline">
                     來源連結
                   </a>
                 </>
               )}
-            </p>
+            </div>
           </div>
 
-          {/* 播放器：<1100px 黏在 header 下方（bg 遮住捲過的內容），影片保持完整可見 */}
+          {/* 播放器：<1100px 黏在 header 下方（毛玻璃底遮住捲過的內容，負邊距延伸到頁緣），影片保持完整可見 */}
           <div
+            ref={stickyRef}
             className={
-              isVideo ? "sticky top-14 z-10 bg-ink min-[1100px]:top-[5.5rem] min-[1100px]:z-auto" : "contents"
+              isVideo
+                ? `sticky top-14 z-10 -mx-3 rounded-b-3xl px-3 pb-2 pt-1 transition-[background-color,backdrop-filter] duration-300 md:-mx-5 md:px-5 min-[1100px]:top-[5.5rem] min-[1100px]:z-auto min-[1100px]:mx-0 min-[1100px]:p-0 ${
+                    playerStuck ? "bg-ink/75 backdrop-blur-xl" : ""
+                  }`
+                : "contents"
             }
           >
             {fileReady ? (
               isVideo ? (
-                <video
-                  ref={(el) => {
-                    playerRef.current = el;
-                  }}
-                  src={api.mediaFileUrl(media.id)}
-                  controls
-                  className="max-h-[min(420px,55svh)] w-full rounded-xl border border-line bg-black min-[1100px]:max-h-[min(680px,70svh)]"
-                  onLoadedMetadata={(e) => handleLoadedMetadata(e.currentTarget)}
-                  onTimeUpdate={(e) => {
-                    setCurrentTime(e.currentTarget.currentTime);
-                    savePlaybackPos(e.currentTarget.currentTime);
-                  }}
-                  onPause={(e) => savePlaybackPos(e.currentTarget.currentTime)}
-                  onPlay={() => {
-                    followRef.current = true;
-                  }}
-                />
+                <div className="glass-card relative rounded-[22px] p-1.5">
+                  <video
+                    ref={(el) => {
+                      playerRef.current = el;
+                    }}
+                    src={api.mediaFileUrl(media.id)}
+                    controls
+                    className="block max-h-[min(420px,55svh)] w-full rounded-2xl bg-black min-[1100px]:max-h-[min(680px,70svh)]"
+                    onLoadedMetadata={(e) => handleLoadedMetadata(e.currentTarget)}
+                    onTimeUpdate={(e) => {
+                      setCurrentTime(e.currentTarget.currentTime);
+                      savePlaybackPos(e.currentTarget.currentTime);
+                    }}
+                    onPause={(e) => savePlaybackPos(e.currentTarget.currentTime)}
+                    onPlay={() => {
+                      followRef.current = true;
+                    }}
+                  />
+                </div>
               ) : (
-                <audio
-                  ref={(el) => {
-                    playerRef.current = el;
-                  }}
-                  src={api.mediaFileUrl(media.id)}
-                  controls
-                  className="w-full"
-                  onLoadedMetadata={(e) => handleLoadedMetadata(e.currentTarget)}
-                  onTimeUpdate={(e) => {
-                    setCurrentTime(e.currentTarget.currentTime);
-                    savePlaybackPos(e.currentTarget.currentTime);
-                  }}
-                  onPause={(e) => savePlaybackPos(e.currentTarget.currentTime)}
-                  onPlay={() => {
-                    followRef.current = true;
-                  }}
-                />
+                <div className="glass-card relative rounded-[28px] p-2">
+                  <audio
+                    ref={(el) => {
+                      playerRef.current = el;
+                    }}
+                    src={api.mediaFileUrl(media.id)}
+                    controls
+                    className="block w-full"
+                    onLoadedMetadata={(e) => handleLoadedMetadata(e.currentTarget)}
+                    onTimeUpdate={(e) => {
+                      setCurrentTime(e.currentTarget.currentTime);
+                      savePlaybackPos(e.currentTarget.currentTime);
+                    }}
+                    onPause={(e) => savePlaybackPos(e.currentTarget.currentTime)}
+                    onPlay={() => {
+                      followRef.current = true;
+                    }}
+                  />
+                </div>
               )
             ) : (
-              <div className="flex items-center gap-3 rounded-xl border border-line bg-surface p-5 text-sm text-fg-muted">
+              <div className="glass-card relative flex items-center gap-3 rounded-3xl p-5 text-sm text-fg-muted">
                 {activeJob ? <WaveformPulse size="sm" /> : null}
                 {activeJob ? "媒體下載中，完成後即可播放…" : "媒體檔尚未就緒"}
               </div>
@@ -501,32 +526,26 @@ export function MediaDetailPage() {
 
             {/* 播放速度：也可用鍵盤 , / . 微調。與播放器同綁一個 sticky 區塊，避免被逐字稿捲動蓋住 */}
             {fileReady && (
-              <div
-                ref={speedRef}
-                className={`flex items-center gap-1.5 text-xs text-fg-muted ${isVideo ? "mt-2" : ""}`}
-              >
+              <div ref={speedRef} className={`flex items-center gap-2 text-xs text-fg-muted ${isVideo ? "mt-2" : ""}`}>
                 <span>速度</span>
-                {[0.75, 1, 1.25, 1.5, 2].map((r) => (
-                  <button
-                    key={r}
-                    onClick={() => setPlaybackRate(r)}
-                    className={`rounded-md border px-1.5 py-0.5 font-mono transition-colors ${
-                      playbackRate === r
-                        ? "border-sonar bg-sonar-soft text-sonar"
-                        : "border-line hover:bg-surface-hover hover:text-fg"
-                    }`}
-                  >
-                    {r}x
-                  </button>
-                ))}
+                <Segmented<string>
+                  size="sm"
+                  label="播放速度"
+                  value={String(playbackRate)}
+                  onChange={(v) => setPlaybackRate(Number(v))}
+                  options={PLAYBACK_RATES.map((r) => ({ value: r, label: <span className="font-mono">{r}x</span> }))}
+                />
+                {!PLAYBACK_RATES.includes(String(playbackRate)) && (
+                  <span className="font-mono text-sonar">{playbackRate}x</span>
+                )}
               </div>
             )}
           </div>
 
           {/* 進行中任務 */}
           {activeJob && (
-            <div className="rounded-xl border border-amber/40 bg-amber-soft p-4">
-              <div className="mb-2 flex items-center justify-between text-sm">
+            <div className="glass-card relative rounded-3xl p-4 outline-1 -outline-offset-1 outline-amber/35">
+              <div className="mb-2.5 flex items-center justify-between gap-3 text-sm">
                 <span className="flex items-center gap-2 text-amber">
                   <WaveformPulse size="sm" />
                   {jobStageLabel(activeJob)}
@@ -535,14 +554,15 @@ export function MediaDetailPage() {
                     : ""}
                 </span>
                 <span className="flex items-center gap-3">
-                  <span className="font-mono text-xs text-amber">{activeJob.progress}%</span>
-                  <button
+                  <span className="font-mono text-xs tabular-nums text-amber">{activeJob.progress}%</span>
+                  <Button
+                    variant="glass-danger"
+                    size="sm"
                     onClick={() => cancelJob(activeJob.id)}
                     disabled={activeJob.cancel_requested}
-                    className="rounded-lg border border-line px-2.5 py-1 text-xs text-fg-muted transition-colors hover:border-danger/50 hover:text-danger disabled:opacity-50"
                   >
                     {activeJob.cancel_requested ? "終止中…" : "終止任務"}
-                  </button>
+                  </Button>
                 </span>
               </div>
               <ProgressBar value={activeJob.progress} processing />
@@ -552,21 +572,22 @@ export function MediaDetailPage() {
 
         {/* 轉錄任務區 */}
         <div
-          className={`rounded-xl border border-line bg-surface ${
+          className={`glass-card relative rounded-3xl ${
             isVideo
               ? "flex min-h-0 flex-col min-[1100px]:sticky min-[1100px]:top-[5.5rem] min-[1100px]:max-h-[calc(100svh-7rem)]"
               : ""
           }`}
         >
           {/* 標頭固定兩列：標題＋主按鈕 / 搜尋與匯出控制，窄欄不會擠出孤行 */}
-          <div className="border-b border-line px-5 py-3">
-            <div className="flex flex-wrap items-center gap-3">
-              <h2 className="font-display text-sm font-semibold">逐字稿</h2>
+          <div className="border-b border-line px-5 py-3.5">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h2 className="font-display text-[15px] font-semibold">逐字稿</h2>
               {doneJobs.length > 1 && (
-                <select
+                <Select
+                  size="sm"
+                  aria-label="選擇轉錄版本"
                   value={selectedJobId ?? ""}
                   onChange={(e) => setSelectedJobId(e.target.value)}
-                  className="rounded-lg border border-line bg-surface px-2 py-1 text-xs outline-none focus:border-sonar"
                 >
                   {doneJobs.map((j) => (
                     <option key={j.id} value={j.id}>
@@ -574,65 +595,80 @@ export function MediaDetailPage() {
                       {j.diarization ? " · 說話者" : ""}
                     </option>
                   ))}
-                </select>
+                </Select>
               )}
               {selectedJob && (
-                <span className="text-xs text-fg-muted">
+                <span className="rounded-full bg-fg/[0.06] px-2.5 py-0.5 text-xs text-fg-muted">
                   {langLabel(selectedJob.detected_language ?? selectedJob.language)}
                 </span>
               )}
-              <button
+              <Button
+                variant="primary"
+                size="sm"
+                className="ml-auto"
                 onClick={() => setNewJobOpen((o) => !o)}
                 disabled={!fileReady || !!activeJob}
-                className="ml-auto rounded-lg bg-sonar px-3 py-1 text-xs font-medium text-ink transition-opacity hover:opacity-90 disabled:opacity-40"
+                aria-expanded={newJobOpen}
               >
                 {doneJobs.length > 0 ? "重新轉錄" : "開始轉錄"}
-              </button>
+              </Button>
             </div>
             {transcript && (
-              <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="搜尋逐字稿…"
-                  className="w-36 grow rounded-lg border border-line bg-ink px-2.5 py-1 text-xs outline-none focus:border-sonar"
-                />
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <label className="relative w-36 grow">
+                  <span className="sr-only">搜尋逐字稿</span>
+                  <svg viewBox="0 0 24 24" className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-muted" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden>
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
+                  </svg>
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="搜尋逐字稿…"
+                    className="field h-8 w-full rounded-full pl-8 pr-3 text-xs placeholder:text-fg-muted/60"
+                  />
+                </label>
                 <label
-                  className="flex cursor-pointer items-center gap-1.5 text-xs text-fg-muted"
+                  className="flex cursor-pointer items-center gap-2 text-xs text-fg-muted"
                   title="同時決定匯出檔案是否包含時間戳"
                 >
-                  <input
-                    type="checkbox"
-                    checked={showTs}
-                    onChange={(e) => toggleTs(e.target.checked)}
-                  />
+                  <Switch checked={showTs} onChange={toggleTs} />
                   時間戳
                 </label>
-                <button onClick={copyAll} className="rounded-lg border border-line px-2.5 py-1 text-xs text-fg-muted hover:bg-surface-hover hover:text-fg">
+                <Button variant="glass" size="sm" onClick={copyAll}>
                   複製全文
-                </button>
-                {(["txt", "srt", "docx"] as const).map((f) => (
-                  <a
-                    key={f}
-                    href={api.transcriptUrl(selectedJobId!, f, showTs)}
-                    className="rounded-lg border border-line px-2.5 py-1 font-mono text-xs uppercase text-fg-muted transition-colors hover:border-sonar hover:text-sonar"
-                  >
-                    {f}
-                  </a>
-                ))}
+                </Button>
+                <div className="field inline-flex h-8 items-center rounded-full p-0.5" role="group" aria-label="匯出逐字稿">
+                  <span className="pl-2 pr-1 text-[11px] text-fg-muted">匯出</span>
+                  {(["txt", "srt", "docx"] as const).map((f) => (
+                    <a
+                      key={f}
+                      href={api.transcriptUrl(selectedJobId!, f, showTs)}
+                      className="press flex h-7 items-center rounded-full px-2.5 font-mono text-[11px] uppercase text-fg-muted hover:bg-[var(--bead-bg)] hover:text-sonar hover:shadow-[var(--bead-shadow)]"
+                    >
+                      {f}
+                    </a>
+                  ))}
+                </div>
               </div>
             )}
           </div>
 
+          {/* 只做進場動畫：listMaxH 在 newJobOpen 變動當下量測，若面板延遲卸載會量錯列表高度 */}
           {newJobOpen && (
-            <div className="border-b border-line px-5 py-4">
+            <motion.div
+              className="border-b border-line px-5 py-4"
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
+            >
               <TranscribeOptions value={settings} onChange={setSettings} />
               <div className="mt-4 flex justify-end">
-                <button onClick={startJob} className="rounded-lg bg-sonar px-4 py-2 text-sm font-medium text-ink hover:opacity-90">
+                <Button variant="primary" onClick={startJob}>
                   開始轉錄
-                </button>
+                </Button>
               </div>
-            </div>
+            </motion.div>
           )}
 
           {/* 逐字稿內容 */}
@@ -658,14 +694,14 @@ export function MediaDetailPage() {
                   <div
                     key={idx}
                     data-seg={idx}
-                    className={`group flex gap-3 rounded-lg px-2 py-1.5 transition-colors ${
-                      idx === activeSegIdx ? "bg-sonar-soft" : "hover:bg-surface-hover"
+                    className={`group flex gap-3 rounded-xl px-2.5 py-1.5 transition-colors ${
+                      idx === activeSegIdx ? "bg-sonar-soft shadow-[inset_2px_0_0_var(--sonar)]" : "hover:bg-fg/[0.04]"
                     }`}
                   >
                     {showTs && (
                       <button
                         onClick={() => seekTo(seg.start)}
-                        className="shrink-0 pt-0.5 font-mono text-xs text-fg-muted transition-colors hover:text-sonar"
+                        className="shrink-0 cursor-pointer pt-0.5 font-mono text-xs tabular-nums text-fg-muted transition-colors hover:text-sonar"
                         title="跳到此處播放"
                       >
                         {fmtTimestamp(seg.start)}
@@ -686,19 +722,21 @@ export function MediaDetailPage() {
                     >
                       {search.trim() ? highlight(seg.text, search.trim()) : seg.text}
                     </p>
-                    <button
+                    <IconButton
+                      label="複製此段"
+                      size="sm"
                       onClick={async () => {
                         await navigator.clipboard.writeText(seg.text);
                         toast("已複製", "success");
                       }}
-                      className="shrink-0 self-start rounded p-1 text-fg-muted opacity-0 transition-opacity hover:text-fg group-hover:opacity-100"
-                      title="複製此段"
+                      // -my-1：按鈕 28px 比單行文字高，負邊距避免撐高每一列
+                      className="-my-1 self-start opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
                     >
                       <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2}>
                         <rect x="9" y="9" width="11" height="11" rx="2" />
                         <path d="M5 15V5a2 2 0 012-2h10" strokeLinecap="round" />
                       </svg>
-                    </button>
+                    </IconButton>
                   </div>
                 ))}
                 {search.trim() && shownSegments.length === 0 && (
@@ -716,13 +754,24 @@ export function MediaDetailPage() {
 
       {/* 歷史任務 */}
       {media.jobs.length > 0 && (
-        <details className="rounded-xl border border-line bg-surface px-5 py-3">
-          <summary className="cursor-pointer text-sm text-fg-muted">
+        <details className="glass-card group/hist relative rounded-3xl px-5 py-3.5">
+          <summary className="flex cursor-pointer list-none items-center gap-2 text-sm text-fg-muted hover:text-fg [&::-webkit-details-marker]:hidden">
+            <svg
+              viewBox="0 0 24 24"
+              className="h-3.5 w-3.5 transition-transform duration-300 ease-[var(--ease-spring)] group-open/hist:rotate-90"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2.5}
+              strokeLinecap="round"
+              aria-hidden
+            >
+              <path d="M9 5l7 7-7 7" />
+            </svg>
             任務歷史（{media.jobs.length}）
           </summary>
-          <ul className="mt-2 flex flex-col gap-1.5 pb-1">
+          <ul className="mt-3 flex flex-col gap-2 pb-1">
             {media.jobs.map((j: Job) => (
-              <li key={j.id} className="flex items-center gap-3 text-xs text-fg-muted">
+              <li key={j.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-muted">
                 <span className="font-mono">{fmtDate(j.created_at)}</span>
                 <span>
                   {j.type === "download"
@@ -730,15 +779,17 @@ export function MediaDetailPage() {
                     : `轉錄 · ${MODE_INFO[(j.mode ?? "dolphin") as ModeKey].name}${j.diarization ? " · 說話者" : ""}${j.denoise ? " · 修復" : ""}`}
                 </span>
                 {j.status === "done" ? (
-                  <CheckDraw className="h-3 w-3" />
+                  <span className="flex items-center gap-1 rounded-full bg-sonar-soft px-2 py-0.5 text-sonar">
+                    <CheckDraw className="h-3 w-3" /> 完成
+                  </span>
                 ) : j.status === "cancelled" ? (
-                  <span>已終止</span>
+                  <span className="rounded-full bg-fg/[0.06] px-2 py-0.5">已終止</span>
                 ) : j.status === "error" ? (
-                  <span className="text-danger" title={j.error_message ?? ""}>
+                  <span className="rounded-full bg-danger-soft px-2 py-0.5 text-danger" title={j.error_message ?? ""}>
                     失敗：{(j.error_message ?? "").slice(0, 60)}
                   </span>
                 ) : (
-                  <span className="text-amber">{j.progress}%</span>
+                  <span className="rounded-full bg-amber-soft px-2 py-0.5 font-mono text-amber">{j.progress}%</span>
                 )}
               </li>
             ))}

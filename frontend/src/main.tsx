@@ -1,9 +1,7 @@
 /** React 進入點：掛載 App、載入全域樣式與自架字體。 */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-// 字體 self-host（@fontsource），離線也能用
-import "@fontsource/space-grotesk/500.css";
-import "@fontsource/space-grotesk/700.css";
+// Apple 裝置走系統 SF Pro；Inter / JetBrains Mono 為其他平台的 self-host 備援（離線也能用）
 import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";

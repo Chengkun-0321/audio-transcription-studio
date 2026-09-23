@@ -7,7 +7,7 @@ import { useApp } from "../context/AppContext";
 import { api, uploadFile } from "../lib/api";
 import type { Folder } from "../lib/types";
 import { SonarPing } from "./sonar";
-import { Modal, ProgressBar } from "./ui";
+import { Button, IconButton, Modal, ProgressBar, Select, Switch } from "./ui";
 import { DEFAULT_SETTINGS, TranscribeOptions, type TranscribeSettings } from "./TranscribeOptions";
 
 const ACCEPT = ".mp3,.mp4,.m4a,.mov,.aac,.wav,.ogg,.opus,.mpeg,.wma,.wmv";
@@ -102,6 +102,14 @@ export function UploadModal({
       <div className="flex flex-col gap-5">
         {/* 拖放區 */}
         <div
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              inputRef.current?.click();
+            }
+          }}
           onDragOver={(e) => {
             e.preventDefault();
             setDragging(true);
@@ -109,16 +117,20 @@ export function UploadModal({
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
           onClick={() => inputRef.current?.click()}
-          className={`relative flex min-h-32 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-6 transition-colors ${
-            dragging ? "border-sonar bg-sonar-soft" : "border-line hover:border-fg-muted"
+          className={`relative flex min-h-36 cursor-pointer flex-col items-center justify-center gap-2 overflow-hidden rounded-3xl border-[1.5px] border-dashed p-6 transition-colors ${
+            dragging
+              ? "border-sonar bg-sonar-soft"
+              : "border-fg/15 bg-fg/[0.03] hover:border-fg/30 hover:bg-fg/[0.05]"
           }`}
         >
           <SonarPing active={dragging} />
-          <svg viewBox="0 0 24 24" className="h-7 w-7 text-fg-muted" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 16V4m0 0l-4 4m4-4l4 4" />
-            <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
-          </svg>
-          <p className="text-sm">拖放檔案到這裡，或點擊選擇</p>
+          <span className="glass relative mb-1 flex h-12 w-12 items-center justify-center rounded-full text-sonar">
+            <svg viewBox="0 0 24 24" className="h-5.5 w-5.5" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M12 16V4m0 0l-4 4m4-4l4 4" />
+              <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
+            </svg>
+          </span>
+          <p className="text-sm font-medium">拖放檔案到這裡，或點擊選擇</p>
           <p className="font-mono text-[11px] text-fg-muted">
             MP3 · MP4 · M4A · MOV · AAC · WAV · OGG · OPUS · MPEG · WMA · WMV
           </p>
@@ -136,10 +148,10 @@ export function UploadModal({
         {items.length > 0 && (
           <ul className="flex flex-col gap-2">
             {items.map((it, i) => (
-              <li key={i} className="rounded-lg border border-line px-3 py-2">
+              <li key={i} className="rounded-2xl bg-fg/[0.04] px-4 py-2.5">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="truncate text-sm">{it.file.name}</span>
-                  <span className="shrink-0 font-mono text-xs text-fg-muted">
+                  <span className="min-w-0 flex-1 truncate text-sm">{it.file.name}</span>
+                  <span className="shrink-0 font-mono text-xs tabular-nums text-fg-muted">
                     {it.status === "error" ? (
                       <span className="text-danger">{it.error}</span>
                     ) : it.status === "done" ? (
@@ -151,13 +163,17 @@ export function UploadModal({
                     )}
                   </span>
                   {!busy && it.status === "pending" && (
-                    <button
+                    <IconButton
+                      label="移除"
+                      tone="danger"
+                      size="sm"
+                      className="-mr-1.5"
                       onClick={() => setItems((p) => p.filter((_, j) => j !== i))}
-                      className="text-fg-muted hover:text-danger"
-                      aria-label="移除"
                     >
-                      ✕
-                    </button>
+                      <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2.2}>
+                        <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+                      </svg>
+                    </IconButton>
                   )}
                 </div>
                 {it.status === "uploading" && <ProgressBar value={it.progress} className="mt-2" />}
@@ -167,28 +183,20 @@ export function UploadModal({
         )}
 
         {/* 目的資料夾 + 是否轉錄 */}
-        <div className="flex flex-wrap items-center gap-4">
-          <label className="flex items-center gap-2 text-sm">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+          <label className="flex items-center gap-2.5 text-sm">
             <span className="text-fg-muted">存到</span>
-            <select
-              value={folder ?? ""}
-              onChange={(e) => setFolder(e.target.value || null)}
-              className="rounded-lg border border-line bg-surface px-2 py-1.5 text-sm outline-none focus:border-sonar"
-            >
+            <Select value={folder ?? ""} onChange={(e) => setFolder(e.target.value || null)} className="min-w-36">
               <option value="">未分類</option>
               {folders.map((f) => (
                 <option key={f.name} value={f.name}>
                   {f.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={autoTranscribe}
-              onChange={(e) => setAutoTranscribe(e.target.checked)}
-            />
+          <label className="flex cursor-pointer items-center gap-2.5 text-sm">
+            <Switch checked={autoTranscribe} onChange={setAutoTranscribe} />
             上傳後立即轉錄
           </label>
         </div>
@@ -196,20 +204,12 @@ export function UploadModal({
         {autoTranscribe && <TranscribeOptions value={settings} onChange={setSettings} />}
 
         <div className="flex justify-end gap-3 border-t border-line pt-4">
-          <button
-            onClick={onClose}
-            disabled={busy}
-            className="rounded-lg border border-line px-4 py-2 text-sm transition-colors hover:bg-surface-hover disabled:opacity-50"
-          >
+          <Button variant="glass" onClick={onClose} disabled={busy}>
             取消
-          </button>
-          <button
-            onClick={start}
-            disabled={busy || items.length === 0}
-            className="rounded-lg bg-sonar px-5 py-2 text-sm font-medium text-ink transition-opacity hover:opacity-90 disabled:opacity-40"
-          >
+          </Button>
+          <Button variant="primary" onClick={start} disabled={busy || items.length === 0}>
             {busy ? "上傳中…" : autoTranscribe ? "上傳並轉錄" : "上傳"}
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>

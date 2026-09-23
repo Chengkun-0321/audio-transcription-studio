@@ -3,14 +3,16 @@
  * 功能：搜尋、排序、多選批次移動/刪除、拖曳歸檔（拖列到側欄資料夾）、
  * 單檔移至資料夾下拉、單檔就地改名、進行中任務即時進度與終止、上傳彈窗。
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { api } from "../lib/api";
 import { fmtDate, fmtDuration, jobStageLabel } from "../lib/format";
+import { exitFast, spring, springBead } from "../lib/motion";
 import type { Folder, Media } from "../lib/types";
 import { CheckDraw, WaveformIcon } from "../components/sonar";
-import { ConfirmDialog, EmptyState, ProgressBar } from "../components/ui";
+import { Button, Checkbox, ConfirmDialog, EmptyState, IconButton, ProgressBar, Select } from "../components/ui";
 import { UploadModal } from "../components/UploadModal";
 
 type SortKey = "created" | "duration" | "title";
@@ -193,95 +195,127 @@ export function DashboardPage() {
     ...folders.map((f) => ({ key: f.name, label: f.name, count: f.media_count })),
   ];
 
+  /** 列尾動作鈕：桌機 hover / 鍵盤聚焦時才顯示，手機常駐 */
+  const rowAction = "transition-opacity md:opacity-0 md:group-hover:opacity-100 md:group-has-[:focus-visible]:opacity-100";
+
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 md:flex-row md:gap-8">
-      {/* 側欄：手機為橫向捲動 chips 列，md 以上為直向清單 */}
-      <aside className="flex w-full shrink-0 items-start gap-1 overflow-x-auto md:block md:w-52 md:overflow-visible">
-        <ul className="flex gap-1 md:flex-col md:gap-0.5">
-          {folderTargets.map((f) => (
-            <li key={f.key ?? "__all__"} className="group relative">
-              <button
-                onClick={() => setCurrentFolder(f.key)}
-                onDragOver={(e) => {
-                  if (f.key !== null) {
-                    e.preventDefault();
-                    setDragOverFolder(f.key);
-                  }
-                }}
-                onDragLeave={() => setDragOverFolder(null)}
-                onDrop={(e) => f.key !== null && onFolderDrop(e, f.key === "inbox" ? null : f.key)}
-                className={`flex w-full items-center justify-between gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm transition-colors ${
-                  currentFolder === f.key
-                    ? "bg-sonar-soft font-medium text-sonar"
-                    : "text-fg-muted hover:bg-surface-hover hover:text-fg"
-                } ${dragOverFolder === f.key ? "ring-2 ring-sonar" : ""}`}
-              >
-                <span className="truncate">{f.label}</span>
-                {f.count != null && <span className="font-mono text-xs opacity-60">{f.count}</span>}
-              </button>
-              {f.key && f.key !== "inbox" && (
-                <span className="absolute right-1 top-1/2 hidden -translate-y-1/2 gap-0.5 group-hover:flex">
-                  <button
-                    onClick={() => {
-                      setRenamingFolder(f.key);
-                      setFolderInput(f.key!);
-                      setNewFolderMode(true);
-                    }}
-                    className="rounded bg-surface p-1 text-fg-muted hover:text-fg"
-                    title="重新命名"
-                  >
-                    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  </button>
-                  <button
-                    onClick={() => deleteFolder(f.key!)}
-                    className="rounded bg-surface p-1 text-fg-muted hover:text-danger"
-                    title="刪除資料夾"
-                  >
-                    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M8 6V4h8v2m-9 0l1 14h8l1-14" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  </button>
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
+      {/* 側欄：手機為橫向捲動 chips 列，md 以上為玻璃面板直向清單 */}
+      <aside className="w-full shrink-0 md:w-56">
+        <div className="md:glass-card md:sticky md:top-20 md:rounded-3xl md:p-2">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:block md:overflow-visible md:pb-0">
+            <ul className="flex gap-1.5 md:flex-col md:gap-0.5">
+              {folderTargets.map((f) => {
+                const active = currentFolder === f.key;
+                const editable = f.key !== null && f.key !== "inbox";
+                return (
+                  <li key={f.key ?? "__all__"} className="group relative shrink-0">
+                    <button
+                      onClick={() => setCurrentFolder(f.key)}
+                      onDragOver={(e) => {
+                        if (f.key !== null) {
+                          e.preventDefault();
+                          setDragOverFolder(f.key);
+                        }
+                      }}
+                      onDragLeave={() => setDragOverFolder(null)}
+                      onDrop={(e) => f.key !== null && onFolderDrop(e, f.key === "inbox" ? null : f.key)}
+                      aria-current={active ? "true" : undefined}
+                      className={`press relative flex h-9 w-full cursor-pointer items-center justify-between gap-2 whitespace-nowrap rounded-full px-3.5 text-sm transition-colors md:h-10 md:rounded-2xl ${
+                        active
+                          ? "font-medium text-fg"
+                          : "text-fg-muted hover:text-fg max-md:bg-fg/[0.05] md:hover:bg-fg/[0.05]"
+                      } ${f.key !== null && dragOverFolder === f.key ? "ring-2 ring-sonar" : ""}`}
+                    >
+                      {active && (
+                        <motion.span
+                          layoutId="folder-bead"
+                          className="bead absolute inset-0 rounded-[inherit]"
+                          transition={springBead}
+                        />
+                      )}
+                      <span className="relative flex min-w-0 items-center gap-2">
+                        <FolderGlyph kind={f.key === null ? "all" : f.key === "inbox" ? "inbox" : "folder"} active={active} />
+                        <span className="truncate">{f.label}</span>
+                      </span>
+                      {f.count != null && (
+                        <span
+                          className={`relative font-mono text-xs tabular-nums opacity-60 ${
+                            editable ? "group-hover:opacity-0 group-has-[:focus-visible]:opacity-0" : ""
+                          }`}
+                        >
+                          {f.count}
+                        </span>
+                      )}
+                    </button>
+                    {editable && (
+                      <span className="absolute right-1 top-1/2 hidden -translate-y-1/2 rounded-full bg-[var(--glass-solid)] shadow-[var(--bead-shadow)] group-hover:flex group-has-[:focus-visible]:flex">
+                        <IconButton
+                          label="重新命名"
+                          tone="accent"
+                          size="sm"
+                          onClick={() => {
+                            setRenamingFolder(f.key);
+                            setFolderInput(f.key!);
+                            setNewFolderMode(true);
+                          }}
+                        >
+                          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </IconButton>
+                        <IconButton label="刪除資料夾" tone="danger" size="sm" onClick={() => deleteFolder(f.key!)}>
+                          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M8 6V4h8v2m-9 0l1 14h8l1-14" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </IconButton>
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
 
-        {newFolderMode ? (
-          <div className="w-40 shrink-0 md:mt-2 md:w-auto md:px-1">
-            <input
-              autoFocus
-              value={folderInput}
-              onChange={(e) => setFolderInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") submitFolder();
-                if (e.key === "Escape") {
-                  setNewFolderMode(false);
-                  setRenamingFolder(null);
-                }
-              }}
-              onBlur={submitFolder}
-              placeholder={renamingFolder ? "新名稱" : "資料夾名稱"}
-              className="w-full rounded-lg border border-sonar bg-surface px-2 py-1.5 text-sm outline-none"
-            />
+            <div className="shrink-0 md:mt-1.5 md:border-t md:border-line md:pt-1.5">
+              {newFolderMode ? (
+                <input
+                  autoFocus
+                  value={folderInput}
+                  onChange={(e) => setFolderInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") submitFolder();
+                    if (e.key === "Escape") {
+                      setNewFolderMode(false);
+                      setRenamingFolder(null);
+                    }
+                  }}
+                  onBlur={submitFolder}
+                  placeholder={renamingFolder ? "新名稱" : "資料夾名稱"}
+                  aria-label={renamingFolder ? "資料夾新名稱" : "新資料夾名稱"}
+                  className="field h-9 w-40 rounded-full px-3.5 text-sm md:h-10 md:w-full md:rounded-2xl"
+                />
+              ) : (
+                <button
+                  onClick={() => {
+                    setFolderInput("");
+                    setRenamingFolder(null);
+                    setNewFolderMode(true);
+                  }}
+                  className="press flex h-9 cursor-pointer items-center gap-2 whitespace-nowrap rounded-full px-3.5 text-sm text-fg-muted hover:bg-fg/[0.05] hover:text-fg md:h-10 md:w-full md:rounded-2xl"
+                >
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden>
+                    <path d="M12 5v14M5 12h14" strokeLinecap="round" />
+                  </svg>
+                  新增資料夾
+                </button>
+              )}
+            </div>
           </div>
-        ) : (
-          <button
-            onClick={() => {
-              setFolderInput("");
-              setRenamingFolder(null);
-              setNewFolderMode(true);
-            }}
-            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg md:mt-2 md:w-full"
-          >
-            <span className="text-base leading-none">＋</span> 新增資料夾
-          </button>
-        )}
+        </div>
       </aside>
 
       {/* 主列表 */}
       <section className="min-w-0 flex-1">
-        <div className="mb-4 flex flex-wrap items-center gap-3">
-          <div className="relative min-w-48 flex-1">
-            <svg viewBox="0 0 24 24" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-muted" fill="none" stroke="currentColor" strokeWidth={2}>
+        <div className="mb-4 flex flex-wrap items-center gap-2.5">
+          <label className="relative min-w-48 flex-1">
+            <span className="sr-only">搜尋檔名</span>
+            <svg viewBox="0 0 24 24" className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-muted" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden>
               <circle cx="11" cy="11" r="7" />
               <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
             </svg>
@@ -289,55 +323,61 @@ export function DashboardPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="搜尋檔名…"
-              className="w-full rounded-lg border border-line bg-surface py-2 pl-9 pr-3 text-sm outline-none transition-colors focus:border-sonar"
+              className="field h-10 w-full rounded-full pl-10 pr-4 text-sm placeholder:text-fg-muted/60"
             />
-          </div>
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value as SortKey)}
-            className="rounded-lg border border-line bg-surface px-2 py-2 text-sm text-fg-muted outline-none focus:border-sonar"
-          >
+          </label>
+          <Select aria-label="排序方式" value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
             <option value="created">最新在前</option>
             <option value="duration">時長最長</option>
             <option value="title">名稱排序</option>
-          </select>
-          <button
-            onClick={() => setUploadOpen(true)}
-            className="rounded-lg bg-sonar px-4 py-2 text-sm font-medium text-ink transition-opacity hover:opacity-90"
-          >
+          </Select>
+          <Button variant="primary" onClick={() => setUploadOpen(true)}>
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.2} aria-hidden>
+              <path d="M12 16V4m0 0l-4.5 4.5M12 4l4.5 4.5M5 20h14" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
             上傳檔案
-          </button>
+          </Button>
         </div>
 
-        {selected.size > 0 && (
-          <div className="mb-3 flex items-center gap-3 rounded-lg border border-sonar/40 bg-sonar-soft px-4 py-2 text-sm">
-            <span className="font-mono">{selected.size}</span> 個已選取
-            <select
-              defaultValue=""
-              onChange={(e) => {
-                if (e.target.value !== "") moveTo([...selected], e.target.value === "__inbox__" ? null : e.target.value);
-                e.target.value = "";
-              }}
-              className="rounded-md border border-line bg-surface px-2 py-1 text-xs outline-none"
+        <AnimatePresence>
+          {selected.size > 0 && (
+            <motion.div
+              className="glass-strong sticky top-16 z-10 mb-3 flex flex-wrap items-center gap-2.5 rounded-3xl py-1.5 pl-4 pr-1.5 text-sm sm:rounded-full"
+              initial={{ opacity: 0, y: -8, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1, transition: spring }}
+              exit={{ opacity: 0, y: -6, transition: exitFast }}
             >
-              <option value="" disabled>
-                移至資料夾…
-              </option>
-              <option value="__inbox__">未分類</option>
-              {folders.map((f) => (
-                <option key={f.name} value={f.name}>
-                  {f.name}
+              <span>
+                <span className="font-mono tabular-nums">{selected.size}</span> 個已選取
+              </span>
+              <Select
+                size="sm"
+                aria-label="移至資料夾"
+                defaultValue=""
+                onChange={(e) => {
+                  if (e.target.value !== "") moveTo([...selected], e.target.value === "__inbox__" ? null : e.target.value);
+                  e.target.value = "";
+                }}
+              >
+                <option value="" disabled>
+                  移至資料夾…
                 </option>
-              ))}
-            </select>
-            <button onClick={() => deleteMedia([...selected])} className="text-danger hover:underline">
-              刪除
-            </button>
-            <button onClick={() => setSelected(new Set())} className="ml-auto text-fg-muted hover:text-fg">
-              取消選取
-            </button>
-          </div>
-        )}
+                <option value="__inbox__">未分類</option>
+                {folders.map((f) => (
+                  <option key={f.name} value={f.name}>
+                    {f.name}
+                  </option>
+                ))}
+              </Select>
+              <Button variant="glass-danger" size="sm" onClick={() => deleteMedia([...selected])}>
+                刪除
+              </Button>
+              <Button variant="ghost" size="sm" className="ml-auto" onClick={() => setSelected(new Set())}>
+                取消選取
+              </Button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {shown.length === 0 ? (
           <EmptyState
@@ -345,34 +385,34 @@ export function DashboardPage() {
             hint={search ? undefined : "上傳音訊或影片，或到下載器貼上 YouTube 網址。"}
             action={
               !search ? (
-                <button
-                  onClick={() => setUploadOpen(true)}
-                  className="rounded-lg bg-sonar px-4 py-2 text-sm font-medium text-ink hover:opacity-90"
-                >
+                <Button variant="primary" onClick={() => setUploadOpen(true)} className="mt-2">
                   上傳第一個檔案
-                </button>
+                </Button>
               ) : undefined
             }
           />
         ) : (
-          <ul className="overflow-hidden rounded-xl border border-line bg-surface">
-            {shown.map((m) => {
+          <ul className="glass-card relative overflow-hidden rounded-3xl">
+            {shown.map((m, i) => {
               const job = jobFor(m);
+              const checked = selected.has(m.id);
               return (
                 <li
                   key={m.id}
                   draggable={editingId !== m.id}
                   onDragStart={(e) => onRowDragStart(e, m.id)}
-                  className="group flex items-center gap-2 border-b border-line/60 px-3 py-3 transition-colors last:border-b-0 hover:bg-surface-hover md:gap-3 md:px-4"
+                  style={{ "--i": i } as CSSProperties}
+                  className="rise-in group flex items-center gap-2.5 border-b border-line/70 px-3 py-3 transition-colors last:border-b-0 hover:bg-fg/[0.035] md:gap-3 md:px-4"
                 >
-                  <input
-                    type="checkbox"
-                    checked={selected.has(m.id)}
+                  <Checkbox
+                    checked={checked}
                     onChange={() => toggleSelect(m.id)}
-                    className="opacity-100 transition-opacity focus:opacity-100 data-[checked]:opacity-100 md:opacity-0 md:group-hover:opacity-100"
-                    style={{ opacity: selected.has(m.id) ? 1 : undefined }}
+                    label={`選取「${m.title}」`}
+                    className={checked || selected.size > 0 ? "" : rowAction}
                   />
-                  <WaveformIcon className="h-4 w-8 shrink-0 text-sonar/70" />
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sonar-soft text-sonar max-sm:hidden" aria-hidden>
+                    <WaveformIcon className="h-3.5 w-7" />
+                  </span>
                   <div className="min-w-0 flex-1">
                     {editingId === m.id ? (
                       <input
@@ -388,25 +428,23 @@ export function DashboardPage() {
                             setEditingId(null);
                           }
                         }}
-                        className="w-full rounded-md border border-sonar bg-surface px-2 py-0.5 text-sm font-medium outline-none"
+                        aria-label="新標題"
+                        className="field h-8 w-full rounded-xl px-2.5 text-sm font-medium"
                       />
                     ) : (
-                      <Link to={`/media/${m.id}`} className="block truncate text-sm font-medium hover:text-sonar">
+                      <Link to={`/media/${m.id}`} className="block truncate text-[15px] font-medium transition-colors hover:text-sonar">
                         {m.title}
                       </Link>
                     )}
-                    <div className="mt-0.5 flex items-center gap-2 text-xs text-fg-muted">
-                      <span className="font-mono">{fmtDuration(m.duration_seconds)}</span>
-                      <span>·</span>
+                    <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-fg-muted">
+                      <span className="font-mono tabular-nums">{fmtDuration(m.duration_seconds)}</span>
+                      <span aria-hidden>·</span>
                       <span className="font-mono">{fmtDate(m.created_at)}</span>
                       {currentFolder === null && m.folder && (
-                        <>
-                          <span>·</span>
-                          <span className="rounded bg-surface-hover px-1.5 py-0.5">{m.folder}</span>
-                        </>
+                        <span className="truncate rounded-full bg-fg/[0.06] px-2 py-0.5">{m.folder}</span>
                       )}
                       {m.source_type === "youtube" && (
-                        <span className="rounded bg-surface-hover px-1.5 py-0.5 font-mono">YT</span>
+                        <span className="rounded-full bg-fg/[0.06] px-2 py-0.5 font-mono text-[10px]">YT</span>
                       )}
                     </div>
                   </div>
@@ -418,41 +456,43 @@ export function DashboardPage() {
                         <div className="w-24 md:w-auto md:min-w-0 md:flex-1">
                           <div className="mb-1 flex items-center justify-between text-[11px] text-amber">
                             <span>{jobStageLabel(job)}</span>
-                            <span className="font-mono">{job.progress}%</span>
+                            <span className="font-mono tabular-nums">{job.progress}%</span>
                           </div>
                           <ProgressBar value={job.progress} processing />
                         </div>
                         <button
                           onClick={() => cancelJob(job.id)}
                           disabled={job.cancel_requested}
-                          className="shrink-0 rounded border border-line px-1.5 py-0.5 text-[11px] text-fg-muted transition-colors hover:border-danger/50 hover:text-danger disabled:opacity-50"
+                          className="press shrink-0 cursor-pointer rounded-full bg-fg/[0.06] px-2.5 py-0.5 text-[11px] text-fg-muted hover:bg-danger-soft hover:text-danger disabled:opacity-50"
                           title="終止任務"
                         >
                           {job.cancel_requested ? "終止中" : "終止"}
                         </button>
                       </>
                     ) : m.latest_job?.status === "error" ? (
-                      <span className="text-xs text-danger" title={m.latest_job.error_message ?? ""}>
+                      <span className="rounded-full bg-danger-soft px-2.5 py-1 text-xs text-danger" title={m.latest_job.error_message ?? ""}>
                         失敗
                       </span>
                     ) : m.has_transcript ? (
-                      <span className="flex items-center gap-1 text-xs text-sonar">
+                      <span className="flex items-center gap-1 rounded-full bg-sonar-soft px-2.5 py-1 text-xs text-sonar">
                         <CheckDraw className="h-3.5 w-3.5" /> 已轉錄
                       </span>
                     ) : (
-                      <span className="text-xs text-fg-muted">未轉錄</span>
+                      <span className="rounded-full bg-fg/[0.05] px-2.5 py-1 text-xs text-fg-muted">未轉錄</span>
                     )}
                   </div>
 
-                  <select
+                  <Select
+                    size="sm"
                     value=""
                     onChange={(e) => {
                       if (e.target.value !== "") moveTo([m.id], e.target.value === "__inbox__" ? null : e.target.value);
                       e.target.value = "";
                     }}
                     onClick={(e) => e.stopPropagation()}
-                    className="hidden w-16 rounded-md border border-line bg-surface px-1 py-1 text-xs text-fg-muted opacity-0 outline-none transition-opacity focus:opacity-100 group-hover:opacity-100 md:block"
+                    aria-label="移至資料夾"
                     title="移至資料夾"
+                    className={`hidden w-20 md:block ${rowAction}`}
                   >
                     <option value="" disabled>
                       移至…
@@ -465,21 +505,13 @@ export function DashboardPage() {
                           {f.name}
                         </option>
                       ))}
-                  </select>
-                  <button
-                    onClick={() => startRename(m)}
-                    className="rounded p-1.5 text-fg-muted opacity-100 transition-opacity hover:text-sonar md:opacity-0 md:group-hover:opacity-100"
-                    title="重新命名"
-                  >
+                  </Select>
+                  <IconButton label="重新命名" tone="accent" onClick={() => startRename(m)} className={`-mx-1 ${rowAction}`}>
                     <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  </button>
-                  <button
-                    onClick={() => deleteMedia([m.id])}
-                    className="rounded p-1.5 text-fg-muted opacity-100 transition-opacity hover:text-danger md:opacity-0 md:group-hover:opacity-100"
-                    title="刪除"
-                  >
+                  </IconButton>
+                  <IconButton label="刪除" tone="danger" onClick={() => deleteMedia([m.id])} className={`-mx-1 ${rowAction}`}>
                     <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M8 6V4h8v2m-9 0l1 14h8l1-14" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  </button>
+                  </IconButton>
                 </li>
               );
             })}
@@ -505,5 +537,27 @@ export function DashboardPage() {
         onCancel={() => setConfirm(null)}
       />
     </div>
+  );
+}
+
+/** 側欄資料夾圖示：全部 / 未分類 / 一般資料夾 */
+function FolderGlyph({ kind, active }: { kind: "all" | "inbox" | "folder"; active: boolean }) {
+  const d = {
+    all: "M4 5h7v6H4zM13 5h7v6h-7zM4 13h7v6H4zM13 13h7v6h-7z",
+    inbox: "M4 13l2.5-7h11l2.5 7v5a1 1 0 01-1 1H5a1 1 0 01-1-1v-5zm0 0h4.5l1 2h5l1-2H20",
+    folder: "M3.5 7a1.5 1.5 0 011.5-1.5h4l2 2h8a1.5 1.5 0 011.5 1.5v8.5a1.5 1.5 0 01-1.5 1.5H5a1.5 1.5 0 01-1.5-1.5V7z",
+  }[kind];
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={`h-4 w-4 shrink-0 ${active ? "text-sonar" : ""}`}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.7}
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d={d} />
+    </svg>
   );
 }
