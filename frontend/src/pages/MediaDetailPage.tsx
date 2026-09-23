@@ -5,7 +5,7 @@
  * ✎ 改名／⋯ 更多操作、鍵盤快捷鍵說明、重新轉錄、進行中任務進度與終止、任務歷史。
  */
 import { motion } from "framer-motion";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { api } from "../lib/api";
@@ -20,7 +20,7 @@ import {
   mediaTypeLabel,
   SOURCE_LABEL,
 } from "../lib/format";
-import type { Folder, Job, Media, Transcript } from "../lib/types";
+import type { Folder, Job, Media, Segment, Transcript } from "../lib/types";
 import { CheckDraw, WaveformPulse } from "../components/sonar";
 import {
   Badge,
@@ -91,7 +91,8 @@ export function MediaDetailPage() {
   const [settings, setSettings] = useState<TranscribeSettings>(defaultSettings);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [menu, setMenu] = useState<{ kind: "more" | "export" | "keys"; anchor: HTMLElement } | null>(null);
-  const [currentTime, setCurrentTime] = useState(0);
+  // 只存「目前播放到第幾句」而非播放秒數：timeupdate 每秒約 4 次，只有換句時才重繪
+  const [activeSegIdx, setActiveSegIdx] = useState(-1);
   const [playbackRate, setPlaybackRateState] = useState(1);
   const [listMaxH, setListMaxH] = useState<number | null>(null);
   const [isWide, setIsWide] = useState(() => window.matchMedia("(min-width: 1100px)").matches);
@@ -171,10 +172,13 @@ export function MediaDetailPage() {
   }, [transcript, activeJob, newJobOpen, media]);
 
   /* 播放跟隨：目前段落高亮並捲動至可視範圍 */
-  const activeSegIdx = useMemo(() => {
-    if (!transcript) return -1;
-    return transcript.segments.findIndex((s) => currentTime >= s.start && currentTime < s.end);
-  }, [transcript, currentTime]);
+  const syncActiveSeg = (t: number) => setActiveSegIdx(transcript ? findSegment(transcript.segments, t) : -1);
+
+  // 切換任務／結果載入後依目前播放位置重算
+  useEffect(() => {
+    syncActiveSeg(playerRef.current?.currentTime ?? 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transcript]);
 
   useEffect(() => {
     if (activeSegIdx < 0 || !followRef.current || !segListRef.current) return;
@@ -225,13 +229,22 @@ export function MediaDetailPage() {
     return () => window.removeEventListener("scroll", onScroll);
   }, [media?.media_kind]);
 
-  const seekTo = (t: number) => {
+  // 只用 ref，參照固定：SegmentRow 的 memo 才不會因為它每次重建而失效
+  const seekTo = useCallback((t: number) => {
     followRef.current = true;
     if (playerRef.current) {
       playerRef.current.currentTime = t;
       playerRef.current.play().catch(() => {});
     }
-  };
+  }, []);
+
+  const copySegment = useCallback(
+    async (text: string) => {
+      await navigator.clipboard.writeText(text);
+      toast("已複製", "success");
+    },
+    [toast],
+  );
 
   const togglePlay = () => {
     const el = playerRef.current;
@@ -251,6 +264,7 @@ export function MediaDetailPage() {
   const jumpSegment = (dir: 1 | -1) => {
     if (!transcript || transcript.segments.length === 0) return;
     const segs = transcript.segments;
+    const currentTime = playerRef.current?.currentTime ?? 0;
     if (dir > 0) {
       const next = segs.findIndex((s) => s.start > currentTime + 0.15);
       if (next >= 0) seekTo(segs[next].start);
@@ -332,7 +346,7 @@ export function MediaDetailPage() {
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [playbackRate, transcript, currentTime, activeSegIdx]);
+  }, [playbackRate, transcript, activeSegIdx]);
 
   const speakerColor = useMemo(() => {
     const map = new Map<string, string>();
@@ -607,7 +621,7 @@ export function MediaDetailPage() {
                     className="block max-h-[min(420px,55svh)] w-full rounded-row bg-black min-[1100px]:max-h-[min(680px,70svh)]"
                     onLoadedMetadata={(e) => handleLoadedMetadata(e.currentTarget)}
                     onTimeUpdate={(e) => {
-                      setCurrentTime(e.currentTarget.currentTime);
+                      syncActiveSeg(e.currentTarget.currentTime);
                       savePlaybackPos(e.currentTarget.currentTime);
                     }}
                     onPause={(e) => savePlaybackPos(e.currentTarget.currentTime)}
@@ -625,7 +639,7 @@ export function MediaDetailPage() {
                     className="block w-full"
                     onLoadedMetadata={(e) => handleLoadedMetadata(e.currentTarget)}
                     onTimeUpdate={(e) => {
-                      setCurrentTime(e.currentTarget.currentTime);
+                      syncActiveSeg(e.currentTarget.currentTime);
                       savePlaybackPos(e.currentTarget.currentTime);
                     }}
                     onPause={(e) => savePlaybackPos(e.currentTarget.currentTime)}
@@ -837,63 +851,19 @@ export function MediaDetailPage() {
                   followRef.current = true;
                 }}
               >
-                {shownSegments.map(({ seg, idx }) => {
-                  const playing = idx === activeSegIdx;
-                  return (
-                    <div
-                      key={idx}
-                      data-seg={idx}
-                      className={`offscreen-skip group relative flex gap-3 rounded-row px-3 py-2 transition-colors ${
-                        playing ? "bg-sonar-soft" : "hover:bg-fg/[0.04]"
-                      }`}
-                    >
-                      {/* 目前播放指示條：獨立膠囊，不用 inset 陰影（圓角上會變成彎線） */}
-                      {playing && <span aria-hidden className="absolute inset-y-2.5 left-1 w-[3px] rounded-full bg-sonar" />}
-                      {showTs && (
-                        <button
-                          onClick={() => seekTo(seg.start)}
-                          className={`shrink-0 cursor-pointer self-start pt-0.5 font-mono text-xs tabular-nums transition-colors hover:text-sonar ${
-                            playing ? "text-sonar" : "text-fg-muted"
-                          }`}
-                          title="跳到此處播放"
-                        >
-                          {fmtTimestamp(seg.start)}
-                        </button>
-                      )}
-                      {seg.speaker && (
-                        <span className={`shrink-0 pt-0.5 font-mono text-xs font-semibold ${speakerColor.get(seg.speaker)}`}>
-                          {seg.speaker}
-                        </span>
-                      )}
-                      <p
-                        onClick={() => {
-                          if (window.getSelection()?.toString()) return; // 反白選字複製時不搶跳轉
-                          seekTo(seg.start);
-                        }}
-                        title="點擊跳到此處播放"
-                        className="min-w-0 flex-1 cursor-pointer text-sm leading-relaxed transition-colors hover:text-sonar"
-                      >
-                        {search.trim() ? highlight(seg.text, search.trim()) : seg.text}
-                      </p>
-                      <IconButton
-                        label="複製此句"
-                        size="sm"
-                        onClick={async () => {
-                          await navigator.clipboard.writeText(seg.text);
-                          toast("已複製", "success");
-                        }}
-                        // -my-1.5：按鈕 32px 比單行文字高，負邊距避免撐高每一列
-                        // outline-offset-0：列有 content-visibility（paint containment），預設 2px 外框會被裁掉上緣
-                        className="-my-1.5 self-start opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-offset-0"
-                      >
-                        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2}>
-                          <rect x="9" y="9" width="11" height="11" rx="2" />
-                          <path d="M5 15V5a2 2 0 012-2h10" strokeLinecap="round" />
-                        </svg>
-                      </IconButton>
-                    </div>
-                  );
-                })}
+                {shownSegments.map(({ seg, idx }) => (
+                  <SegmentRow
+                    key={idx}
+                    seg={seg}
+                    idx={idx}
+                    playing={idx === activeSegIdx}
+                    showTs={showTs}
+                    speakerClass={seg.speaker ? speakerColor.get(seg.speaker) : undefined}
+                    query={search.trim()}
+                    onSeek={seekTo}
+                    onCopy={copySegment}
+                  />
+                ))}
                 {search.trim() && shownSegments.length === 0 && (
                   <p className="py-8 text-center text-sm text-fg-muted">找不到「{search}」</p>
                 )}
@@ -1010,6 +980,97 @@ export function MediaDetailPage() {
     </div>
   );
 }
+
+/** 播放中的句子：最後一個 start ≤ t 的句子，且 t 還沒超過它的 end；不在任何句子內回傳 -1。
+ *  segments 依 start 排序，二分搜尋讓每次 timeupdate 不必掃過上千句。 */
+function findSegment(segs: Segment[], t: number): number {
+  let lo = 0;
+  let hi = segs.length - 1;
+  let found = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (segs[mid].start <= t) {
+      found = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return found >= 0 && t < segs[found].end ? found : -1;
+}
+
+/**
+ * 逐字稿一句。memo：播放換句、任務輪詢造成的頁面重繪只會重畫 playing 有變的兩列，
+ * 上千句的逐字稿不必每次全部 diff；所以 onSeek / onCopy 必須是參照固定的 callback。
+ */
+const SegmentRow = memo(function SegmentRow({
+  seg,
+  idx,
+  playing,
+  showTs,
+  speakerClass,
+  query,
+  onSeek,
+  onCopy,
+}: {
+  seg: Segment;
+  idx: number;
+  playing: boolean;
+  showTs: boolean;
+  speakerClass?: string;
+  query: string;
+  onSeek: (t: number) => void;
+  onCopy: (text: string) => void;
+}) {
+  return (
+    <div
+      data-seg={idx}
+      className={`offscreen-skip group relative flex gap-3 rounded-row px-3 py-2 transition-colors ${
+        playing ? "bg-sonar-soft" : "hover:bg-fg/[0.04]"
+      }`}
+    >
+      {/* 目前播放指示條：獨立膠囊，不用 inset 陰影（圓角上會變成彎線） */}
+      {playing && <span aria-hidden className="absolute inset-y-2.5 left-1 w-[3px] rounded-full bg-sonar" />}
+      {showTs && (
+        <button
+          onClick={() => onSeek(seg.start)}
+          className={`shrink-0 cursor-pointer self-start pt-0.5 font-mono text-xs tabular-nums transition-colors hover:text-sonar ${
+            playing ? "text-sonar" : "text-fg-muted"
+          }`}
+          title="跳到此處播放"
+        >
+          {fmtTimestamp(seg.start)}
+        </button>
+      )}
+      {seg.speaker && (
+        <span className={`shrink-0 pt-0.5 font-mono text-xs font-semibold ${speakerClass}`}>{seg.speaker}</span>
+      )}
+      <p
+        onClick={() => {
+          if (window.getSelection()?.toString()) return; // 反白選字複製時不搶跳轉
+          onSeek(seg.start);
+        }}
+        title="點擊跳到此處播放"
+        className="min-w-0 flex-1 cursor-pointer text-sm leading-relaxed transition-colors hover:text-sonar"
+      >
+        {query ? highlight(seg.text, query) : seg.text}
+      </p>
+      <IconButton
+        label="複製此句"
+        size="sm"
+        onClick={() => onCopy(seg.text)}
+        // -my-1.5：按鈕 32px 比單行文字高，負邊距避免撐高每一列
+        // outline-offset-0：列有 content-visibility（paint containment），預設 2px 外框會被裁掉上緣
+        className="-my-1.5 self-start opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-offset-0"
+      >
+        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2}>
+          <rect x="9" y="9" width="11" height="11" rx="2" />
+          <path d="M5 15V5a2 2 0 012-2h10" strokeLinecap="round" />
+        </svg>
+      </IconButton>
+    </div>
+  );
+});
 
 /** 搜尋關鍵字高亮：把命中的片段包 <mark>（大小寫不敏感）。 */
 function highlight(text: string, q: string) {

@@ -40,20 +40,22 @@ cd backend && .venv/bin/python -c "from app.main import app" # 後端 import 驗
   - **模型下載**（`services/models.py`）：轉錄任務與「模型」頁共用同一套，同一模型只有一條下載執行緒、其他呼叫者加入等待；進度用 `snapshot_download(tqdm_class=…)` 接彙總位元組，取消靠進度回呼丟例外中止，等待中的任務全部取消時下載也一併中止。狀態只存在記憶體；是否已下載只看 `models/hub/` 檔案，不連網。`ensure()` 回傳本機 snapshot 路徑交給 mlx_whisper，載入時不再連網。下載中或有任務使用時不可刪除（409）
   - 進度權重 fetch_model 30 / denoise 15 / transcribe 70 / diarize 25，未開啟的階段不佔比；進度 = 各階段完成度加權和（並行也正確）
   - 換模型時 transcriber 先清掉 `ModelHolder` 舊模型再載新的（否則兩個同時常駐）；`config.MLX_CACHE_LIMIT_MB` 限制 Metal 快取
-- `segments.json` 是轉錄結果的單一真實來源，TXT/SRT/DOCX 由 `exporter.py` 即時產生，不存副本
+- `segments.json` 是轉錄結果的單一真實來源，TXT/SRT/DOCX 由 `exporter.py` 即時產生，不存副本；檔案保留逐字 `words`（說話者對齊用），但 `GET /api/jobs/{id}/segments` 回應時拿掉（前端用不到，佔整份 JSON 大半）
 
 ### 儲存（檔案系統即資料庫）
 
 - `data/inbox/<id>/`（未分類）與 `data/library/<資料夾>/<id>/`；每個媒體目錄含 `source.*`、`meta.json`、`jobs/<job-id>.json`、`jobs/<job-id>.segments.json`
 - 搬移/改名資料夾 = 搬目錄；JSON 一律 `atomic_write_json`（tmp + rename），前端輪詢不會讀到半成品
 - `storage._JOB_PATHS` 是 job-id → 路徑的記憶體索引（假設單一 uvicorn process）；任何搬動目錄的操作後要 `_reindex_jobs`，miss 時會 fallback 掃描
+- `storage._ACTIVE_JOBS` 是進行中 job-id 集合：`create_job` 加入、`update_job` 進終態／`delete_media` 移除；`list_jobs(active_only=True)`（前端輪詢、`models._in_use`）只讀這些檔，不全掃。狀態仍以 job 檔為準
 
 ### 任務狀態機與取消
 
-- `queued → processing → done | error | cancelled`，`storage.update_job` 進終態時自動補 `completed_at`
+- `queued → processing → done | error | cancelled`，`storage.update_job` 進終態時自動補 `completed_at`；它的讀→改→寫在 `storage._lock` 內（否則 worker 的進度寫入會蓋掉 `cancel_requested`）
+- BackgroundTasks 不會跨重啟續跑：`main.lifespan` 啟動時以 `storage.recover_interrupted_jobs()` 把殘留的 queued/processing 標成 error。放 lifespan 而非 import 時，`from app.main import app` 驗證才不會動到執行中後端的任務
 - 終止 = 設 `cancel_requested` 旗標；worker 在下個進度回報點（`update_job` 回傳值）拋 `JobCancelled`——協作式取消，勿嘗試強殺執行緒
 - 第三方庫（yt-dlp、pyannote hook）會把 `JobCancelled` 包成別的例外，所以 `except Exception` 分支要再以旗標判斷是否為取消
-- 執行中媒體被刪 → job 檔消失 → `update_job` 拋 `FileNotFoundError` → worker 安靜結束
+- 執行中媒體被刪 → job 檔消失 → `update_job` 拋 `FileNotFoundError` → worker 安靜結束；已是終態的 job 不可再寫，`update_job` 拋 `storage.JobClosed`（FileNotFoundError 子類，同樣安靜結束）——uvicorn 關閉時會等背景任務跑完，重啟後舊 process 的進度寫入才不會把已標中斷的任務寫回 processing
 - 下載任務取消會連媒體條目一起刪；下載進度刻意停在 90/92% 保留給合併/轉檔
 
 ### 前端 `frontend/src/`（Vite 7 + React 19 + Tailwind 4 + framer-motion，Node 22）
@@ -87,5 +89,5 @@ cd backend && .venv/bin/python -c "from app.main import app" # 後端 import 驗
 - **顏色**：只用 `index.css` 的 CSS 變數（經 `@theme inline` 變成 `bg-surface`、`text-sonar` 等 utility），元件內不寫色票；主題由 `useTheme` 切 `.dark` class，不跟隨系統
 - **玻璃材質**：導覽/控制層用 `glass`，疊在內容上的彈窗/抽屜/toast 用 `glass-strong`，內容卡片用 `glass-card`（無 backdrop-filter，避免長列表卡頓）；`glass-rim` 需要定位元素。背景 `.ambient` 是靜態漸層 + 顆粒，**不要加常駐動畫**（玻璃的 backdrop-filter 會每幀重算，閒置也耗 GPU）
 - **UI 形狀**：容器圓角只用 `rounded-panel`(24) → `rounded-row`(16) → `rounded-tile`(8)，每往內一層 `p-2` 就降一級（同心）；控制項一律 `rounded-full`，高度只用 32/40/48。狀態標籤用 `Badge`、選單用 `Menu`、帶欄位名的資訊用 `MetaLine`/`InfoItem`（都在 `components/ui.tsx`），不要自己手寫
-- **長列表效能**：切主題時 `useTheme` 會加 `.theme-switching` 暫停全站 transition（否則逐字稿上千句會同時啟動數千個顏色動畫）；逐字稿列用 `offscreen-skip`（`content-visibility: auto`），其預估高度 = 單行句內容高，**改列的字級/行高時要同步改**，否則播放跟隨捲動會偏移
+- **長列表效能**：切主題時 `useTheme` 會加 `.theme-switching` 暫停全站 transition（否則逐字稿上千句會同時啟動數千個顏色動畫）；逐字稿列是 `SegmentRow`（`memo`），頁面只存目前句索引 `activeSegIdx`、`timeupdate` 以二分搜尋 `findSegment` 更新，換句時才重繪——傳給列的 callback 要維持參照固定（`useCallback`）；列用 `offscreen-skip`（`content-visibility: auto`），其預估高度 = 單行句內容高，**改列的字級/行高時要同步改**，否則播放跟隨捲動會偏移
 - 可拖曳歸檔的列表項目不要用 `motion.li`（framer-motion 會接管 `onDragStart` 破壞原生拖曳），進場動畫改用 CSS `rise-in`

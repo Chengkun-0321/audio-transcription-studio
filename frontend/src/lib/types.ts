@@ -67,20 +67,13 @@ export interface Folder {
 }
 
 /** 逐字時間戳（word-level timestamps）。 */
-export interface Word {
-  word: string;
-  start: number;
-  end: number;
-}
-
-/** 轉錄片段：一句話的時間範圍、文字、說話者與逐字時間戳。 */
+/** 轉錄片段：一句話的時間範圍、文字與說話者（逐字時間戳 words 只存在後端檔案，API 不回傳）。 */
 export interface Segment {
   start: number;
   end: number;
   text: string;
   /** 說話者標籤（S1/S2...），僅開啟說話者識別時存在 */
   speaker?: string;
-  words: Word[];
 }
 
 /** Whisper 模型與本機狀態（清單與順序由後端 config.WHISPER_MODELS 決定）。 */
@@ -105,7 +98,7 @@ export interface WhisperModel {
   in_use: boolean;
 }
 
-/** 完整轉錄結果（jobs/<id>.segments.json 的內容）。 */
+/** 完整轉錄結果（jobs/<id>.segments.json 的內容，不含逐字時間戳）。 */
 export interface Transcript {
   language: string;
   segments: Segment[];

@@ -76,11 +76,18 @@ def cancel_job(job_id: str):
 
 @router.get("/{job_id}/segments")
 def get_segments(job_id: str):
-    """轉錄結果原始 JSON（segments + words + speaker），前端逐字稿頁用。"""
+    """轉錄結果 JSON（segments + speaker），前端逐字稿頁用。
+
+    逐字時間戳 words 只在後端說話者對齊時用到，前端不需要；檔案照樣保留，
+    回應時拿掉（通常佔整份 JSON 的大半）。
+    """
     path = storage.segments_path(job_id)
     if path is None or not path.exists():
         raise HTTPException(404, "尚無轉錄結果")
-    return storage.read_json(path)
+    data = storage.read_json(path)
+    for seg in data["segments"]:
+        seg.pop("words", None)
+    return data
 
 
 @router.get("/{job_id}/transcript")

@@ -10,7 +10,7 @@ silero-vad                    # 語音活動偵測：切除靜音段，防 Whisp
 opencc-python-reimplemented   # 簡體 → 台灣繁體（s2twp）
 soundfile                     # 音訊檔讀寫（pyannote 相依）
 
-# 說話者識別（CPU 運算；模型為 HF gated，需根目錄 .env 的 HF_TOKEN）
+# 說話者識別（spawn 子行程以 MPS 運算，失敗退回 CPU；模型為 HF gated，需根目錄 .env 的 HF_TOKEN）
 pyannote.audio
 
 # YouTube 下載

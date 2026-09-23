@@ -13,7 +13,8 @@
   前端 2 秒輪詢也不會讀到寫一半的檔案
 - 搬移/刪除媒體 = 搬移/刪除資料夾本身，metadata 永遠跟著檔案走，
   備份整個 data/ 目錄即為完整備份
-- job 檔就是任務狀態的唯一真實來源：worker 寫、API 讀，沒有記憶體共享狀態
+- job 檔就是任務狀態的唯一真實來源：worker 寫、API 讀；記憶體只放加速查找的索引
+  （_JOB_PATHS、_ACTIVE_JOBS），不存狀態本身
 """
 from __future__ import annotations
 
@@ -23,6 +24,7 @@ import re
 import secrets
 import shutil
 import subprocess
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -32,8 +34,19 @@ from . import config
 
 # 單一 uvicorn process，記憶體註冊表加速 job_id -> 路徑查找；重啟後靠掃描重建
 _JOB_PATHS: dict[str, Path] = {}
+# 進行中（queued/processing）的 job ID：前端輪詢只讀這些，不必每次掃遍全部 job 檔。
+# 重啟時由 recover_interrupted_jobs() 清掉殘留任務，所以從空集合開始即正確
+_ACTIVE_JOBS: set[str] = set()
+_ACTIVE_STATUSES = ("queued", "processing")
+# update_job 的讀→改→寫在鎖內：否則 worker 的進度寫入可能蓋掉剛設下的 cancel_requested
+_lock = threading.Lock()
 
 _FOLDER_NAME_RE = re.compile(r"^[^/\\\0]{1,80}$")
+
+
+class JobClosed(FileNotFoundError):
+    """任務已是終態卻還有人要寫入：通常是重啟時被判定中斷，但舊 process 還在收尾
+    （uvicorn 關閉時會等背景任務跑完）。沿用 FileNotFoundError，worker 會安靜結束。"""
 
 
 def now_iso() -> str:
@@ -208,6 +221,7 @@ def delete_media(media_dir: Path) -> None:
     """刪除媒體（含原始檔與所有轉錄結果）。執行中的任務會因 job 檔消失而自行中止。"""
     for p in (media_dir / "jobs").glob("*.json"):
         _JOB_PATHS.pop(p.stem, None)
+        _ACTIVE_JOBS.discard(p.stem)
     shutil.rmtree(media_dir)
 
 
@@ -300,6 +314,7 @@ def create_job(media_dir: Path, job_type: str, **fields: Any) -> dict:
     path = media_dir / "jobs" / f"{job['id']}.json"
     atomic_write_json(path, job)
     _JOB_PATHS[job["id"]] = path
+    _ACTIVE_JOBS.add(job["id"])
     return job
 
 
@@ -325,19 +340,27 @@ def get_job(job_id: str) -> Optional[dict]:
 def update_job(job_id: str, **patch: Any) -> dict:
     """部分更新任務並回傳更新後全貌（worker 靠回傳值檢查 cancel_requested）。
 
-    job 檔已消失（媒體被刪）時丟 FileNotFoundError，讓執行中的 pipeline 中止。
-    狀態進入終態（done/error/cancelled）時自動補寫 completed_at。
+    job 檔已消失（媒體被刪）時丟 FileNotFoundError、已是終態時丟 JobClosed，讓執行中的
+    worker 中止。狀態進入終態（done/error/cancelled）時自動補寫 completed_at，並移出進行中集合。
     """
-    p = job_path(job_id)
-    if p is None:
-        # 媒體被刪除時 job 檔一併消失；讓執行中的 pipeline 中止
-        raise FileNotFoundError(f"job 已不存在: {job_id}")
-    job = read_json(p)
-    job.update(patch)
-    if patch.get("status") in ("done", "error", "cancelled") and not job.get("completed_at"):
-        job["completed_at"] = now_iso()
-    atomic_write_json(p, job)
-    return job
+    with _lock:
+        p = job_path(job_id)
+        if p is None:
+            # 媒體被刪除時 job 檔一併消失；讓執行中的 pipeline 中止
+            _ACTIVE_JOBS.discard(job_id)
+            raise FileNotFoundError(f"job 已不存在: {job_id}")
+        job = read_json(p)
+        if job.get("status") not in _ACTIVE_STATUSES:
+            # 終態不可再改：避免舊 process 的進度寫入把中斷的任務寫回 processing
+            _ACTIVE_JOBS.discard(job_id)
+            raise JobClosed(f"job 已結束: {job_id}")
+        job.update(patch)
+        if patch.get("status") in ("done", "error", "cancelled") and not job.get("completed_at"):
+            job["completed_at"] = now_iso()
+        if job.get("status") not in _ACTIVE_STATUSES:
+            _ACTIVE_JOBS.discard(job_id)
+        atomic_write_json(p, job)
+        return job
 
 
 def request_cancel(job_id: str) -> dict:
@@ -345,31 +368,75 @@ def request_cancel(job_id: str) -> dict:
     job = get_job(job_id)
     if job is None:
         raise FileNotFoundError(f"job 已不存在: {job_id}")
-    if job.get("status") not in ("queued", "processing"):
+    if job.get("status") not in _ACTIVE_STATUSES:
         raise ValueError("任務已結束，無法終止")
-    return update_job(job_id, cancel_requested=True)
+    try:
+        return update_job(job_id, cancel_requested=True)
+    except JobClosed:
+        raise ValueError("任務已結束，無法終止") from None  # 檢查後的瞬間剛好結束
+
+
+def _iter_job_files() -> Iterator[tuple[Path, Path]]:
+    """走訪全部 job 檔，回傳 (媒體目錄, job 檔路徑)。"""
+    for d in iter_media_dirs():
+        for p in (d / "jobs").glob("*.json"):
+            if not p.name.endswith(".segments.json"):
+                yield d, p
+
+
+def _with_title(job: dict, media_dir: Path) -> dict:
+    try:
+        job["media_title"] = read_json(media_dir / "meta.json").get("title")
+    except Exception:
+        job["media_title"] = None
+    return job
 
 
 def list_jobs(active_only: bool = False) -> list[dict]:
-    """列出所有任務（附 media_title，新到舊）。active_only 只回 queued/processing。"""
+    """列出所有任務（附 media_title，新到舊）。active_only 只回 queued/processing。
+
+    active_only 只讀 _ACTIVE_JOBS 裡的 job 檔（前端每 2 秒輪詢），其餘情況掃遍全部。
+    """
     jobs = []
-    for d in iter_media_dirs():
-        for p in (d / "jobs").glob("*.json"):
-            if p.name.endswith(".segments.json"):
-                continue
+    if active_only:
+        for job_id in tuple(_ACTIVE_JOBS):
+            p = job_path(job_id)
             try:
-                job = read_json(p)
+                job = read_json(p) if p else None
+            except Exception:
+                continue  # 寫入中或剛被搬移，下一輪再讀
+            if job is None or job.get("status") not in _ACTIVE_STATUSES:
+                _ACTIVE_JOBS.discard(job_id)
+                continue
+            jobs.append(_with_title(job, p.parent.parent))
+    else:
+        for d, p in _iter_job_files():
+            try:
+                jobs.append(_with_title(read_json(p), d))
             except Exception:
                 continue
-            if active_only and job.get("status") not in ("queued", "processing"):
-                continue
-            try:
-                job["media_title"] = read_json(d / "meta.json").get("title")
-            except Exception:
-                job["media_title"] = None
-            jobs.append(job)
     jobs.sort(key=lambda j: j.get("created_at", ""), reverse=True)
     return jobs
+
+
+def recover_interrupted_jobs() -> int:
+    """啟動時呼叫：前一個 process 留下的 queued/processing 任務標為 error，回傳筆數。
+
+    BackgroundTasks 不會跨重啟續跑，不處理的話這些任務會永遠顯示進行中、也終止不了。
+    順便建立 _JOB_PATHS 索引。
+    """
+    count = 0
+    for _, p in _iter_job_files():
+        _JOB_PATHS[p.stem] = p
+        try:
+            status = read_json(p).get("status")
+        except Exception:
+            continue
+        if status in _ACTIVE_STATUSES:
+            update_job(p.stem, status="error", stage=None,
+                       error_message="後端重新啟動，任務已中斷")
+            count += 1
+    return count
 
 
 def segments_path(job_id: str) -> Optional[Path]:

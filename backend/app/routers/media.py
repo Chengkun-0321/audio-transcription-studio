@@ -1,6 +1,7 @@
 """媒體 API：上傳、YouTube 下載、列表、播放串流、改名、搬移、刪除。"""
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 from typing import Optional
 
@@ -23,8 +24,12 @@ def _media_dir_or_404(media_id: str) -> Path:
 
 
 @router.post("/upload")
-async def upload(file: UploadFile, folder: Optional[str] = Form(None)):
-    """上傳媒體檔（multipart）。以 1MB 分塊寫入避免大檔佔記憶體。"""
+def upload(file: UploadFile, folder: Optional[str] = Form(None)):
+    """上傳媒體檔（multipart）。以 1MB 分塊寫入避免大檔佔記憶體。
+
+    刻意用同步函式（FastAPI 丟 threadpool）：寫檔與 ffprobe（最長 60 秒）若在
+    async 函式裡跑會卡住 event loop，上傳期間所有請求（含任務輪詢）都沒回應。
+    """
     ext = Path(file.filename or "").suffix.lower()
     if ext not in config.ALLOWED_UPLOAD_EXTS:
         raise HTTPException(400, f"不支援的格式 {ext or '(無副檔名)'}")
@@ -41,9 +46,8 @@ async def upload(file: UploadFile, folder: Optional[str] = Form(None)):
 
     dest = media_dir / f"source{ext}"
     with dest.open("wb") as f:
-        while chunk := await file.read(1024 * 1024):
-            f.write(chunk)
-    meta = storage.update_meta(media_dir, duration_seconds=storage.probe_duration(dest))
+        shutil.copyfileobj(file.file, f, 1024 * 1024)
+    storage.update_meta(media_dir, duration_seconds=storage.probe_duration(dest))
     return storage.media_summary(media_dir)
 
 

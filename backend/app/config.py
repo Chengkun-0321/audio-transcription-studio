@@ -38,10 +38,8 @@ FRONTEND_PORT = _port("FRONTEND_PORT", 3000)
 # 模型統一放在專案內 models/hub/（不用 ~/.cache/huggingface），下載後永久保存。
 # mlx-whisper 與 pyannote 都經由 huggingface_hub 下載，HF_HOME 一設就全部生效。
 MODELS_DIR = PROJECT_ROOT / "models"
-#os.environ.setdefault("HF_HOME", str(MODELS_DIR))
-# 只有系統未設定 HF_HOME 時才使用專案 models/；若已設定，模型會存到外部路徑。
+# 刻意覆寫（非 setdefault）：無論系統有沒有設 HF_HOME，都強制用此專案的 models/。
 os.environ["HF_HOME"] = str(MODELS_DIR)
-# 無論系統設定為何，都強制使用此專案的 models/。
 # 關掉 Xet 協定、改走一般 HTTP 下載：Xet 的進度只在檔案快完成時才回報，
 # 進度 callback 丟出的例外也會被吞掉（取消不了）。HTTP 能逐塊回報進度、可中止、可續傳。
 os.environ["HF_HUB_DISABLE_XET"] = "1"
