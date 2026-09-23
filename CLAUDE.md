@@ -31,11 +31,14 @@ cd backend && .venv/bin/python -c "from app.main import app" # 後端 import 驗
 - `config.py` 是最先 import 的模組：讀根目錄 `.env`、設 `HF_HOME`，必須在任何 HF 套件載入前完成。路徑、`MODE_MODELS`、允許副檔名都集中在此
 - `routers/`（media / folders / jobs）只做驗證與呼叫；`storage.py` 是唯一碰檔案系統的層；`services/` 是實際工作
 - 長任務用 `BackgroundTasks` 丟 threadpool 跑**同步函式**：轉錄 → `pipeline.run_transcribe_job`，下載 → `downloader.download`
-- 轉錄流程：`denoise`（選，Rust `deep-filter`）→ `transcriber`（ffmpeg 解碼 16k → silero-vad 切段 → ≤120s 塊逐塊 mlx-whisper → 時間戳映射回原軸）→ `diarize`（選，pyannote）→ 寫 `segments.json`
+- 轉錄任務以 `pipeline._job_lock` **一次只跑一個**，等待中維持 `queued`（每秒檢查取消）：mlx_whisper 的 `ModelHolder` 只有一個槽位，並行不同模式會每塊重載模型、記憶體疊加
+- 轉錄流程：`denoise`（選，Rust `deep-filter`）→ `load_audio`（f32le 零拷貝、唯讀陣列，轉 torch 用 `audio.to_tensor`）→ `transcriber`（silero-vad 切段 → ≤120s 塊只在停頓處切 → 逐塊 mlx-whisper → 時間戳映射回原軸 → 濾字幕署名幻覺與重複迴圈）→ 寫 `segments.json`
+  - 開說話者識別時 `diarizer.Diarization` 在 **spawn 子行程**跑 pyannote（MPS），**與 Whisper 並行**；進度經共享 `Value` 回傳，取消/失敗直接 terminate，結束後 torch/pyannote/MPS 記憶體隨行程歸還。Whisper 完成後 `assign_speakers` 逐字對齊並在句中換人處切句
   - VAD 語音覆蓋率 <20%（歌曲/音樂）時放棄 VAD 整段均分；`auto` 語言在第一塊偵測後鎖定
-  - 說話者識別刻意吃**原始檔**而非降噪檔；`denoiser`/`diarizer` 在 pipeline 內延遲 import（torch 不用不載）
-  - **閒置省資源**：`mlx_whisper` 在 `transcribe()` 內才 import（頂層 import 會讓閒置後端多 ~130MB）；轉錄任務數歸零時 `pipeline._release_models()` 清掉 mlx `ModelHolder`、pyannote pipeline 與 MLX Metal 快取（否則常駐 1.5–3GB+）。下個任務重載模型約數秒
-  - 進度權重 denoise 15 / transcribe 70 / diarize 25，未開啟的階段不佔比
+  - 說話者識別刻意吃**原始音訊**而非降噪檔，用 `exclusive_speaker_diarization`；`denoiser`/`diarizer` 在 pipeline 內延遲 import（torch 不用不載）
+  - **閒置省資源**：`mlx_whisper` 在 `transcribe()` 內才 import（頂層 import 會讓閒置後端多 ~130MB）；轉錄任務數歸零時 `pipeline._release_models()` 清掉 mlx `ModelHolder` 與 MLX Metal 快取（否則常駐 1.5–3GB+）。下個任務重載模型約數秒
+  - 進度權重 denoise 15 / transcribe 70 / diarize 25，未開啟的階段不佔比；進度 = 各階段完成度加權和（並行也正確）
+  - 換模式時 transcriber 先清掉 `ModelHolder` 舊模型再載新的（否則兩個同時常駐）；`config.MLX_CACHE_LIMIT_MB` 限制 Metal 快取
 - `segments.json` 是轉錄結果的單一真實來源，TXT/SRT/DOCX 由 `exporter.py` 即時產生，不存副本
 
 ### 儲存（檔案系統即資料庫）
@@ -66,7 +69,10 @@ cd backend && .venv/bin/python -c "from app.main import app" # 後端 import 驗
 - **mlx 模型名**：`whisper-small-mlx`、`whisper-large-v3-mlx` 帶 `-mlx` 後綴，`whisper-large-v3-turbo` 沒有（HF 實際 repo 名，寫錯會 404）
 - **numpy 鎖版** `>=2.2.2,<2.5`：numba 上限 vs pyannote-metrics/scipy 下限
 - **降噪**：用官方 Rust 執行檔 `backend/bin/deep-filter`（進版控）；DeepFilterNet 的 pip 套件已停更且會降級 numpy，**不要安裝**
-- **pyannote 4.x**：pipeline 回傳 `DiarizeOutput`，Annotation 在 `.speaker_diarization`；強制 CPU（MPS 不相容）
+- **pyannote 4.x**：pipeline 回傳 `DiarizeOutput`，用 `.exclusive_speaker_diarization`；跑在 MPS（實測 4.0.7 + torch 2.12 與 CPU 逐段相同、快約 13 倍），失敗自動退回 CPU；`embedding_batch_size=8` 壓峰值
+- **pyannote 只能在子行程 import**：其相依 optuna 會把 ImportError 連同 traceback 永久存在模組裡，經 `f_back` 釘住 import 當下整條呼叫鏈的區域變數（音訊陣列、pipeline 永遠回收不了）；另外 `silero_vad` import 時會把 torch 全域執行緒設為 1，同 process 的 pyannote 會變單執行緒
+- **不要加回** Whisper 的跨塊 `initial_prompt` 與 `hallucination_silence_threshold`：實測前者慢 2.6 倍、句子黏成 30 秒一段且會傳染錯字，後者會整句漏掉真實語音
+- **MLX 快取上限**：`config.MLX_CACHE_LIMIT_MB`（256）不可拿掉，MLX 預設無上限，實測鯨魚模式 50 秒內衝破 11GB
 - **HF_TOKEN** 在根目錄 `.env`（gitignore），pyannote gated model 用；帳號需在 HF 網站接受 `pyannote/speaker-diarization-community-1` 條款
 - **中文輸出**：zh 結果一律過 OpenCC（segments 用 s2twp、words 用 s2t 保持字數對齊），不要移除
 - **前後端對應**：轉錄模式 key（cheetah/dolphin/whale）與 job `stage` 名稱在 `config.MODE_MODELS` 與 `frontend/src/lib/format.ts`（`MODE_INFO`、`STAGE_LABEL`）兩邊都要改

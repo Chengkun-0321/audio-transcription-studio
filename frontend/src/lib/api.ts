@@ -56,6 +56,7 @@ export const api = {
     mode: string;
     language: string;
     diarization: boolean;
+    num_speakers: number | null;
     denoise: boolean;
   }) => request<Job>("/api/jobs", json(opts)),
   getJob: (id: string) => request<Job>(`/api/jobs/${id}`),

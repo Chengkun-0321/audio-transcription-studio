@@ -1,6 +1,6 @@
 /**
  * 轉錄設定表單：語言（常用膠囊＋其他下拉）、三檔模式卡片（選中框彈簧滑動）、
- * 進階摺疊區（說話者識別／音訊修復，iOS 設定列樣式）。上傳彈窗與媒體詳細頁共用。
+ * 進階摺疊區（說話者識別＋人數／音訊修復，iOS 設定列樣式）。上傳彈窗與媒體詳細頁共用。
  */
 import { motion } from "framer-motion";
 import { useId, useState } from "react";
@@ -17,6 +17,8 @@ export interface TranscribeSettings {
   mode: ModeKey;
   language: string;
   diarization: boolean;
+  /** 說話者人數；null = 自動判斷（僅說話者識別開啟時送出） */
+  num_speakers: number | null;
   denoise: boolean;
 }
 
@@ -24,8 +26,11 @@ export const DEFAULT_SETTINGS: TranscribeSettings = {
   mode: "dolphin",
   language: "auto",
   diarization: false,
+  num_speakers: null,
   denoise: false,
 };
+
+const SPEAKER_COUNTS = [2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 const MODE_GLYPHS: Record<ModeKey, string> = {
   // 極簡線條速度感：一 / 二 / 三 道波
@@ -179,12 +184,37 @@ export function TranscribeOptions({
               <span className="min-w-0 flex-1">
                 <span className="block text-sm">說話者識別</span>
                 <span className="mt-0.5 block text-xs leading-relaxed text-fg-muted">
-                  標記每段話由誰說。此功能在本機以 CPU 運算，一小時音檔約需 10–20
-                  分鐘，視發言人數與音檔品質而定。
+                  標記每段話由誰說，句中換人會自動分句。以 GPU 運算並與轉錄同時進行，一小時音檔約需
+                  4 分鐘。
                 </span>
               </span>
               <Switch checked={value.diarization} onChange={(v) => onChange({ ...value, diarization: v })} />
             </label>
+            {value.diarization && (
+              <div className="flex items-center gap-4 px-4 py-3">
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm">說話者人數</span>
+                  <span className="mt-0.5 block text-xs leading-relaxed text-fg-muted">
+                    已知人數時指定，分辨會更準確。
+                  </span>
+                </span>
+                <Select
+                  size="sm"
+                  aria-label="說話者人數"
+                  value={value.num_speakers ?? ""}
+                  onChange={(e) =>
+                    onChange({ ...value, num_speakers: e.target.value ? Number(e.target.value) : null })
+                  }
+                >
+                  <option value="">自動判斷</option>
+                  {SPEAKER_COUNTS.map((n) => (
+                    <option key={n} value={n}>
+                      {n} 人
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            )}
             <label className="flex cursor-pointer items-center gap-4 px-4 py-3">
               <span className="min-w-0 flex-1">
                 <span className="block text-sm">音訊修復（AI 去噪＋語音增強）</span>

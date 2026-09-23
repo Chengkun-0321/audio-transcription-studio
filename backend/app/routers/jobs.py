@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import urllib.parse
+from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from fastapi.responses import PlainTextResponse, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .. import config, storage
 from ..services import exporter
@@ -20,6 +21,8 @@ class JobReq(BaseModel):
     language: str = "auto"         # auto | zh | en | ...
     diarization: bool = False
     denoise: bool = False
+    # 說話者人數（僅說話者識別開啟時有效）；None = 由 pyannote 自動判斷
+    num_speakers: Optional[int] = Field(None, ge=2, le=10)
 
 
 @router.post("")
@@ -36,6 +39,7 @@ def create_job(req: JobReq, background: BackgroundTasks):
         media_dir, "transcribe",
         mode=req.mode, language=req.language,
         diarization=req.diarization, denoise=req.denoise,
+        num_speakers=req.num_speakers if req.diarization else None,
     )
     background.add_task(run_transcribe_job, job["id"], media_dir)
     return job

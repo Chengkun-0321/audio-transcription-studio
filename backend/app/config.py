@@ -51,6 +51,10 @@ MODE_MODELS = {
     "whale": "mlx-community/whisper-large-v3-mlx",      # 鯨魚：最準，重要內容
 }
 
+# MLX 會把用過的 Metal buffer 留作快取重用，預設無上限（實測鯨魚模式 6 分鐘音訊 50 秒內
+# 衝破 11GB）。256MB 與 1GB 實測速度無差、峰值少約 0.7GB
+MLX_CACHE_LIMIT_MB = 256
+
 # 允許上傳的副檔名（其餘一律 400 拒絕）
 ALLOWED_UPLOAD_EXTS = {
     ".mp3", ".mp4", ".m4a", ".mov", ".aac", ".wav",

@@ -21,6 +21,8 @@ export interface Job {
   mode?: "cheetah" | "dolphin" | "whale";
   language?: string;
   diarization?: boolean;
+  /** 指定的說話者人數；null = 自動判斷 */
+  num_speakers?: number | null;
   denoise?: boolean;
   /** 自動偵測模式下實際偵測到的語言 */
   detected_language?: string;

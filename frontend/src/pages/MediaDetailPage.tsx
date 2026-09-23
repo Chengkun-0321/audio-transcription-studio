@@ -753,6 +753,8 @@ export function MediaDetailPage() {
                     { label: "語言", value: langLabel(selectedJob.detected_language ?? selectedJob.language) },
                     { label: "模式", value: MODE_INFO[(selectedJob.mode ?? "dolphin") as ModeKey].name },
                     { label: "說話者識別", value: selectedJob.diarization ? "開啟" : "關閉" },
+                    !!selectedJob.diarization &&
+                      !!selectedJob.num_speakers && { label: "說話者人數", value: `${selectedJob.num_speakers} 人` },
                     !!selectedJob.denoise && { label: "音訊修復", value: "開啟" },
                   ]}
                 />
