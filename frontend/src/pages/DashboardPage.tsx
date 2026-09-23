@@ -1,9 +1,9 @@
 /**
  * 媒體庫（儀表板）：資料夾側欄 + 媒體列表。
  * 功能：搜尋、排序、多選批次移動/刪除、拖曳歸檔（拖列到側欄資料夾）、
- * 單檔移至資料夾下拉、進行中任務即時進度與終止、上傳彈窗。
+ * 單檔移至資料夾下拉、單檔就地改名、進行中任務即時進度與終止、上傳彈窗。
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { api } from "../lib/api";
@@ -29,6 +29,9 @@ export function DashboardPage() {
   const [renamingFolder, setRenamingFolder] = useState<string | null>(null);
   const [folderInput, setFolderInput] = useState("");
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [titleInput, setTitleInput] = useState("");
+  const skipBlurSaveRef = useRef(false); // Esc 取消後，輸入框卸載觸發的 blur 不要存檔
 
   const load = useCallback(async () => {
     try {
@@ -108,6 +111,28 @@ export function DashboardPage() {
       setSelected(new Set());
       load();
       toast(`已移至「${folder ?? "未分類"}」`, "success");
+    } catch (e) {
+      toast((e as Error).message, "error");
+    }
+  };
+
+  const startRename = (m: Media) => {
+    skipBlurSaveRef.current = false;
+    setTitleInput(m.title);
+    setEditingId(m.id);
+  };
+
+  /** 儲存改名（只改顯示標題，不動實體檔名）。Enter 以 blur 觸發，避免重複送出。 */
+  const saveTitle = async (m: Media) => {
+    setEditingId(null);
+    if (skipBlurSaveRef.current) return;
+    skipBlurSaveRef.current = true;
+    const t = titleInput.trim();
+    if (!t || t === m.title) return;
+    try {
+      const updated = await api.renameMedia(m.id, t);
+      setMedia((p) => p.map((x) => (x.id === m.id ? updated : x)));
+      toast("已更名", "success");
     } catch (e) {
       toast((e as Error).message, "error");
     }
@@ -336,7 +361,7 @@ export function DashboardPage() {
               return (
                 <li
                   key={m.id}
-                  draggable
+                  draggable={editingId !== m.id}
                   onDragStart={(e) => onRowDragStart(e, m.id)}
                   className="group flex items-center gap-2 border-b border-line/60 px-3 py-3 transition-colors last:border-b-0 hover:bg-surface-hover md:gap-3 md:px-4"
                 >
@@ -349,9 +374,27 @@ export function DashboardPage() {
                   />
                   <WaveformIcon className="h-4 w-8 shrink-0 text-sonar/70" />
                   <div className="min-w-0 flex-1">
-                    <Link to={`/media/${m.id}`} className="block truncate text-sm font-medium hover:text-sonar">
-                      {m.title}
-                    </Link>
+                    {editingId === m.id ? (
+                      <input
+                        autoFocus
+                        value={titleInput}
+                        onChange={(e) => setTitleInput(e.target.value)}
+                        onFocus={(e) => e.currentTarget.select()}
+                        onBlur={() => saveTitle(m)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.nativeEvent.isComposing) e.currentTarget.blur();
+                          if (e.key === "Escape") {
+                            skipBlurSaveRef.current = true;
+                            setEditingId(null);
+                          }
+                        }}
+                        className="w-full rounded-md border border-sonar bg-surface px-2 py-0.5 text-sm font-medium outline-none"
+                      />
+                    ) : (
+                      <Link to={`/media/${m.id}`} className="block truncate text-sm font-medium hover:text-sonar">
+                        {m.title}
+                      </Link>
+                    )}
                     <div className="mt-0.5 flex items-center gap-2 text-xs text-fg-muted">
                       <span className="font-mono">{fmtDuration(m.duration_seconds)}</span>
                       <span>·</span>
@@ -423,6 +466,13 @@ export function DashboardPage() {
                         </option>
                       ))}
                   </select>
+                  <button
+                    onClick={() => startRename(m)}
+                    className="rounded p-1.5 text-fg-muted opacity-100 transition-opacity hover:text-sonar md:opacity-0 md:group-hover:opacity-100"
+                    title="重新命名"
+                  >
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </button>
                   <button
                     onClick={() => deleteMedia([m.id])}
                     className="rounded p-1.5 text-fg-muted opacity-100 transition-opacity hover:text-danger md:opacity-0 md:group-hover:opacity-100"
