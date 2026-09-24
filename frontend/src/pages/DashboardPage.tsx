@@ -683,7 +683,7 @@ export function DashboardPage() {
                       </>
                     ) : m.latest_job?.status === "error" ? (
                       <Badge tone="danger" title={m.latest_job.error_message ?? ""}>
-                        轉錄失敗
+                        {m.latest_job.type === "download" ? "下載失敗" : "轉錄失敗"}
                       </Badge>
                     ) : m.has_transcript ? (
                       <Badge tone="sonar">

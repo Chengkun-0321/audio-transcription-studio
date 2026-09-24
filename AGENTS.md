@@ -7,7 +7,7 @@
 ## 建置、驗證與開發指令
 
 - `cp .env.example .env`：建立本機 Port 與選用的 Hugging Face Token 設定。
-- `./manage.sh start`：以正式模式啟動前後端（前端有變動才 `vite build`，再由 `vite preview` 提供），開啟 `http://localhost:3000`。`./manage.sh dev` 改用 Vite dev server（HMR）。`stop`、`restart`（沿用上次模式）、`status`、`logs` 分別用於停止、重啟、查狀態與看日誌。後端沒有自動重載，修改後須執行 `restart`；正式模式下前端修改也須 `restart`。
+- `./manage.sh start`：以正式模式啟動前後端（前端有變動才 `vite build`，再由 `vite preview` 提供），開啟 `http://localhost:3000`。`./manage.sh dev` 改用 Vite dev server（HMR）。`stop`、`restart`（沿用上次模式）、`status`、`logs` 分別用於停止、重啟、查狀態與看日誌；`update-ytdlp` 更新 yt-dlp（YouTube 下載出現 403 時執行，yt-dlp 刻意不鎖版，需系統有 deno），更新後須 `restart`。後端沒有自動重載，修改後須執行 `restart`；正式模式下前端修改也須 `restart`。
 - `cd frontend && npm ci && npm run build`：依鎖定版本安裝套件，執行 TypeScript 檢查並建置 Vite。Node 版本依 `frontend/.nvmrc` 使用 22。
 - `cd backend && .venv/bin/python -c "from app.main import app"`：驗證後端可匯入；必須在 `backend/` 目錄執行。
 

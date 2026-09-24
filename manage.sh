@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 一鍵開關（規格 §7）：前後端各一個 process，pid file 追蹤，不常駐、不開機自啟
 #
-# 用法: ./manage.sh {start|dev|stop|status|restart|logs}
+# 用法: ./manage.sh {start|dev|stop|status|restart|logs|update-ytdlp}
 #   start   正式模式（日常使用）：前端打包後由 vite preview 提供，無檔案監看、載入 React 正式版，閒置最省
 #           原始碼有變動才重新打包，所以改前端後 restart 即生效
 #   dev     開發模式：前端跑 Vite dev server（HMR，存檔即時更新）
@@ -9,6 +9,7 @@
 #   status  顯示兩個 process 是否存活與前端模式
 #   restart stop + 以上次的模式重新啟動（後端程式碼變更後需要）
 #   logs    顯示兩邊最後 40 行日誌
+#   update-ytdlp  更新 yt-dlp（YouTube 下載出現 403 時執行，更新後需 restart）
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUN_DIR="$DIR/.run"
@@ -144,6 +145,19 @@ logs() {
   tail -n 40 "$RUN_DIR/backend.log" "$RUN_DIR/frontend.log" 2>/dev/null || echo "尚無日誌"
 }
 
+# YouTube 常改版，舊版 yt-dlp 會被拒 403；[default] 一併更新 yt-dlp-ejs（JS challenge 腳本）
+update_ytdlp() {
+  local py="$DIR/backend/.venv/bin/python" before after
+  before="$("$py" -m yt_dlp --version 2>/dev/null || echo 未安裝)"
+  "$py" -m pip install -q -U "yt-dlp[default]"
+  after="$("$py" -m yt_dlp --version)"
+  echo "yt-dlp：$before → $after"
+  command -v deno >/dev/null || echo "警告：找不到 deno，YouTube 下載可能失敗（brew install deno）" >&2
+  if _alive backend && [[ "$before" != "$after" ]]; then
+    echo "後端運行中，執行 ./manage.sh restart 才會生效"
+  fi
+}
+
 case "${1:-}" in
   start) start prod ;;
   dev) start dev ;;
@@ -151,5 +165,6 @@ case "${1:-}" in
   status) status ;;
   restart) restart ;;
   logs) logs ;;
-  *) echo "用法: ./manage.sh {start|dev|stop|status|restart|logs}" ;;
+  update-ytdlp) update_ytdlp ;;
+  *) echo "用法: ./manage.sh {start|dev|stop|status|restart|logs|update-ytdlp}" ;;
 esac

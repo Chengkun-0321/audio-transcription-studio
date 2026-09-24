@@ -12,6 +12,7 @@
 - Git
 - Python 3.12
 - FFmpeg 與 FFprobe
+- Deno（yt-dlp 解 YouTube JS challenge 用，未安裝時 YouTube 下載常出現 403）
 - nvm（`manage.sh` 預期位於 `~/.nvm/nvm.sh`）
 - Node.js 22
 - 網路連線：安裝套件、首次下載模型及使用 YouTube 下載時需要
@@ -21,7 +22,7 @@
 
 ```bash
 xcode-select --install
-brew install git python@3.12 ffmpeg
+brew install git python@3.12 ffmpeg deno
 ```
 
 請另外安裝標準 nvm，並確認以下檔案存在：
@@ -168,3 +169,10 @@ http://localhost:3000
 ```
 
 常見原因包括：未接受 Pyannote 條款、Token 錯誤、首次下載時無網路、磁碟空間不足、FFmpeg 未安裝，或執行環境無法使用 Metal。
+
+YouTube 下載出現 `HTTP Error 403` 多半是 yt-dlp 版本過舊（YouTube 常改版），執行：
+
+```bash
+./manage.sh update-ytdlp
+./manage.sh restart
+```

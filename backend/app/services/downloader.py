@@ -100,4 +100,6 @@ def _readable_error(e: Exception) -> str:
         return "這是私人影片，無法下載"
     if "Sign in" in msg:
         return "影片需要登入才能觀看（年齡限制或會員限定）"
+    if "HTTP Error 403" in msg:
+        return "YouTube 拒絕下載，多半是 yt-dlp 版本過舊：請執行 ./manage.sh update-ytdlp 後重啟"
     return f"下載失敗：{msg[:300]}"

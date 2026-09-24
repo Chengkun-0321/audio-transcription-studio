@@ -13,8 +13,9 @@ soundfile                     # 音訊檔讀寫（pyannote 相依）
 # 說話者識別（spawn 子行程以 MPS 運算，失敗退回 CPU；模型為 HF gated，需根目錄 .env 的 HF_TOKEN）
 pyannote.audio
 
-# YouTube 下載
-yt-dlp
+# YouTube 下載：[default] 帶入 yt-dlp-ejs（JS challenge 腳本，需系統有 deno）。
+# 刻意不鎖版：YouTube 常改版，舊版會 403，用 ./manage.sh update-ytdlp 更新
+yt-dlp[default]
 
 # DOCX 匯出
 python-docx

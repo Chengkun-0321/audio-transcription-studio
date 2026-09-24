@@ -15,6 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ./manage.sh restart    # 沿用上次模式重啟；後端改動必須（uvicorn 未開 --reload），正式模式下前端改動也要
 ./manage.sh status     # 查看 pid 與前端模式
 ./manage.sh logs       # 兩邊最後 40 行日誌（.run/*.log）
+./manage.sh update-ytdlp  # 更新 yt-dlp（YouTube 下載 403 時；不鎖版，需系統有 deno），之後要 restart
 
 cd frontend && npx tsc -b                                    # 前端型別檢查（npm run build = tsc -b + vite build）
 cd backend && .venv/bin/python -c "from app.main import app" # 後端 import 驗證（必須在 backend/ 下執行，根目錄會找不到 app）
